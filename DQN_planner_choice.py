@@ -15,6 +15,7 @@ from PIL import Image
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
+State = namedtuple('State', ('img', 'currentTaskIndex', 'maxConsecExecuted', 'currentlyExecuting', 'time_left_ep'))
 
 trainingSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
@@ -29,39 +30,36 @@ class DQN(nn.Module):
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
         num = 2064547 - h - w
-        linear_input_size = num + h + w  # linear_input_size = 194723 essentially just used this to remove unused args
+        linear_input_size = num + h + w  # essentially just used this to remove unused args
         self.headPlanner = nn.Linear(linear_input_size, outputs - 1)
         self.headTime = nn.Linear(linear_input_size, 1)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x_image, x_task_index, x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep):
-        # if type(f_state) is list:
-        # then f_state is a batch of states
-        # ret_list = []
-        # for i_state in f_state:
-        #    x = i_state[0]
-        #     x = x.to(device)
-        #     x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-        #     # added additional state info below for linear layer
-        #     x_additional = torch.from_numpy(
-        #         np.ascontiguousarray(i_state[2] + i_state[3] + [time_left_ep], dtype=np.float32))
-        #     x_additional = x_additional.reshape(1, -1)
-        #     x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-        #     ret_list.append(self.head(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
-        # return ret_list
-
         x = x_image
         x = x.to(device)
+        # print("start time")
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        # print("end!")
         # added additional state info below for linear layer
-        x_additional = torch.from_numpy(
-            np.ascontiguousarray(x_ConsecExecuted + x_currentlyExecuting + [x_time_left_ep], dtype=np.float32))
-        x_additional = x_additional.reshape(1, -1)  # transpose
+        # TODO make below work with batches as well instead of catting everything into one column vector
+        # x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=1)
+        # if len(x_time_left_ep) > 50:
+        #     print("x_cnsec: " + str(x_ConsecExecuted.size()))
+        #     print("x_curr: " + str(x_currentlyExecuting.dim()))
+        #     print("x_time: " + str(x_time_left_ep.dim))
+        #     print("x_add: " + str(x_additional.dim))
+        if len(x_time_left_ep) > 50:  # is a batch
+            x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=1)
+        else:
+            x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=0)
+            x_additional = x_additional.reshape(1, -1)  # transpose
+        # print(x_additional.size(1)) height of vector
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-        # reminder: state=(img, currentTaskName, maxConsecExecuted, currentlyExecuting, time_left_ep)
-        outp = self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))
-        outt = self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))
+        # reminder: state=(img, currentTaskIndex, maxConsecExecuted, currentlyExecuting, time_left_ep)
+        outp = torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+        outt = torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
         return outp, outt
 
 
@@ -118,30 +116,17 @@ def optimize_model():
     # (a final state would've been the one after which simulation ended)
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                             batch.next_state)), device=device, dtype=torch.bool)
+    number_of_non_final_states = torch.sum(non_final_mask)
 
     non_final_next_states = [s for s in batch.next_state if s is not None]
+    non_final_next_state_batch = State(*zip(*non_final_next_states))
     # state_batch = [
     #     torch.cat(tuple(batch.state[j][i] for j in range(len(batch.state))) for i in range(len(batch.state[0])))]
-    state_batch = [s for s in batch.state]
-    action_batch = [a[0] for a in batch.action]
+    # state_batch = [s for s in batch.state] this doesnt change anything
+    state_batch = State(*zip(*batch.state))  # creates a tuple of batches like above
+    action_batch = torch.tensor([a[0] for a in batch.action]).reshape(1, -1)
     reward_batch = torch.cat(batch.reward)
-    # non_final_next_states = []
-    # # print(len(batch.next_state))
-    # for ns in batch.next_state:
-    #     if ns is not None:
-    #         non_final_next_states.append(ns)
-    # # print(len(non_final_next_states))
-    # state_batch = []
-    # for b_state in batch.state:
-    #     state_batch.append(b_state)
-    # action_batch = []
-    # for b_action in batch.action:
-    #     action_batch.append(b_action)
-    # reward_batch = []
-    # for b_rew in batch.reward:
-    #     reward_batch.append(b_rew)
-    # reward_batch = torch.tensor(reward_batch)
-
+    # print(state_batch)
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken. These are the actions which would've been taken
     # for each batch state according to policy_net
@@ -149,8 +134,13 @@ def optimize_model():
     # below: get corresponding value from each output vector i in batch corrsponding to action in actionbatch at index i
     # and append them to a list --> state_action_values
     # print(*state_batch)
-    # TODO here 125 args instead of 5 (6 if self included)
-    nn_out_p, nn_out_t = policy_net(*state_batch)
+    state_img_batch = torch.cat(state_batch.img)
+    state_max_consec_exec_batch = torch.cat(state_batch.maxConsecExecuted, dim=0).reshape((124, 17))
+    state_curr_exec_batch = torch.cat(state_batch.currentlyExecuting, dim=0).reshape((124, 17))
+    state_t_left_ep_batch = torch.cat(state_batch.time_left_ep).reshape((124, 1))
+    # print(state_img_batch.size()) seems correct
+    nn_out_p, nn_out_t = policy_net(state_img_batch, None, state_max_consec_exec_batch, state_curr_exec_batch,
+                                    state_t_left_ep_batch)
 
     state_action_values = nn_out_p.gather(1, action_batch)
     # for i in range(0, len(action_batch)):
@@ -165,11 +155,20 @@ def optimize_model():
     next_state_values = torch.zeros(len(non_final_next_states), device=device)
     next_state_Values = torch.zeros(BATCH_SIZE, device=device)
     # print(target_net(non_final_next_states))
-    targ_output = target_net(*non_final_next_states)
-    for i in range(len(targ_output)):
-        next_state_values[i] = torch.max(targ_output[i])
+    nxt_state_img_batch = torch.cat(non_final_next_state_batch.img)
+    nxt_state_max_consec_exec_batch = torch.cat(non_final_next_state_batch.maxConsecExecuted, dim=0).reshape((
+        number_of_non_final_states, 17))
+    nxt_state_curr_exec_batch = torch.cat(non_final_next_state_batch.currentlyExecuting, dim=0).reshape((
+        number_of_non_final_states, 17))
+    nxt_state_t_left_ep_batch = torch.cat(non_final_next_state_batch.time_left_ep).reshape((
+        number_of_non_final_states, 1))
+    targ_output_p, targ_output_t = target_net(nxt_state_img_batch, None, nxt_state_max_consec_exec_batch,
+                                              nxt_state_curr_exec_batch, nxt_state_t_left_ep_batch)
+    for i in range(len(targ_output_p)):
+        next_state_values[i] = torch.max(targ_output_p[i])
 
-    next_state_values[non_final_mask] = next_state_values.detach()
+    # TODO check below and line 183
+    next_state_Values[non_final_mask] = next_state_values.detach()
     # TODO google reinforcement learning incorperate time (continous output value) into loss???
     # Compute the expected Q values
     expected_state_action_values = (next_state_Values * GAMMA) + reward_batch
@@ -183,7 +182,6 @@ def optimize_model():
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
-    # print("reached")
 
 
 def reward(taskIndex, actionNo, actionT):
@@ -212,7 +210,7 @@ def select_action(select_action_State):
             # t.max(1) will return largest column value of each row.
             # second column on max result is index of where max element was found
             planner_vector, best_planner_runtime = policy_net(*select_action_State)
-            # TODO neural network outputs negative time sometimes how to fix??? --> in reward function + (relu?)
+            # TODO neural network outputs negative time sometimes how to fix??? --> in reward function
             return planner_vector.max(1)[1].view(1, 1), best_planner_runtime
     else:
         timeAlloc = random.random() * select_action_State[4]  # random allocation between 0 and remaining time
@@ -225,8 +223,8 @@ num_episodes = len(trainingSet) * 2
 taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
 for i_episode in range(num_episodes):
     time_left_ep = 300
-    maxConsecExecuted = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    currentlyExecuting = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     current_task_index = math.floor(random.random() * len(trainingSet))  # pick a random task in training set
     currentTaskName = trainingSet.iloc[current_task_index][0]
     currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
@@ -235,14 +233,12 @@ for i_episode in range(num_episodes):
     img = np.ascontiguousarray(img, dtype=np.float32) / 255
     img = torch.from_numpy(img)
     img = process(img).unsqueeze(0)
-    state = (
-        img, current_task_index, maxConsecExecuted, currentlyExecuting,
-        time_left_ep)  # store task_index to calc. reward
+    state = (img, current_task_index, maxConsecExecuted, currentlyExecuting,
+             torch.tensor([time_left_ep]))  # store task_index to calc. reward
     last_actionNumber = None
     same_action = False
-    for t in count():
-        if t > time_left_ep:
-            break
+    t = 0
+    while t <= time_left_ep:
         # Select and perform an action
         action = select_action(state)
         actionNumber = action[0].item()
@@ -255,16 +251,18 @@ for i_episode in range(num_episodes):
             if same_action:
                 currentlyExecuting[actionNumber] += actionTime
             else:
-                currentlyExecuting = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                currentlyExecuting[actionNumber] += actionTime
+                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+                currentlyExecuting[actionNumber] = currentlyExecuting[actionNumber] + actionTime
             max_index = max(range(len(currentlyExecuting)), key=currentlyExecuting.__getitem__)
-            maxConsecExecutedNext = state[2].copy()
+            maxConsecExecutedNext = state[2].clone()
             if maxConsecExecutedNext[max_index] < currentlyExecuting[max_index]:
                 maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
-                next_state = (img, current_task_index, maxConsecExecutedNext, currentlyExecuting, time_left_ep)
+                next_state = (
+                    img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([time_left_ep]))
 
             # create new state
-            next_state = (img, current_task_index, maxConsecExecutedNext, currentlyExecuting, time_left_ep)
+            next_state = (
+                img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([time_left_ep]))
 
         else:
             # next state is final
