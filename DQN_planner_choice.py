@@ -39,23 +39,12 @@ class DQN(nn.Module):
     def forward(self, x_image, x_task_index, x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep):
         x = x_image
         x = x.to(device)
-        # print("start time")
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-        # print("end!")
-        # added additional state info below for linear layer
-        # TODO make below work with batches as well instead of catting everything into one column vector
-        # x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=1)
-        # if len(x_time_left_ep) > 50:
-        #     print("x_cnsec: " + str(x_ConsecExecuted.size()))
-        #     print("x_curr: " + str(x_currentlyExecuting.dim()))
-        #     print("x_time: " + str(x_time_left_ep.dim))
-        #     print("x_add: " + str(x_additional.dim))
         if len(x_time_left_ep) > 50:  # is a batch
             x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=1)
         else:
             x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=0)
             x_additional = x_additional.reshape(1, -1)  # transpose
-        # print(x_additional.size(1)) height of vector
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
         # reminder: state=(img, currentTaskIndex, maxConsecExecuted, currentlyExecuting, time_left_ep)
         outp = torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
@@ -104,7 +93,6 @@ steps_done = 0
 
 
 def optimize_model():
-    # TODO get optimize working again
     if len(memory) < BATCH_SIZE:
         return
     transitions = memory.sample(BATCH_SIZE)
@@ -120,6 +108,7 @@ def optimize_model():
 
     non_final_next_states = [s for s in batch.next_state if s is not None]
     non_final_next_state_batch = State(*zip(*non_final_next_states))
+    # non_final_next_states = torch.tensor(non_final_next_states)
     # state_batch = [
     #     torch.cat(tuple(batch.state[j][i] for j in range(len(batch.state))) for i in range(len(batch.state[0])))]
     # state_batch = [s for s in batch.state] this doesnt change anything
@@ -139,10 +128,12 @@ def optimize_model():
     state_curr_exec_batch = torch.cat(state_batch.currentlyExecuting, dim=0).reshape((124, 17))
     state_t_left_ep_batch = torch.cat(state_batch.time_left_ep).reshape((124, 1))
     # print(state_img_batch.size()) seems correct
+    print("start time")
     nn_out_p, nn_out_t = policy_net(state_img_batch, None, state_max_consec_exec_batch, state_curr_exec_batch,
                                     state_t_left_ep_batch)
-
-    state_action_values = nn_out_p.gather(1, action_batch)
+    print("finish time")
+    state_action_values = nn_out_p.gather(1, action_batch.reshape(124, 1))
+    state_time_alloc_Values = nn_out_t
     # for i in range(0, len(action_batch)):
     #     state_action_values.append(nn_output_vectors[i][0][action_batch[i][0].item()])
     # state_action_values = torch.stack(state_action_values)  # list of tensors to tensor
@@ -154,6 +145,7 @@ def optimize_model():
     # state value or 0 in case the state was final.
     next_state_values = torch.zeros(len(non_final_next_states), device=device)
     next_state_Values = torch.zeros(BATCH_SIZE, device=device)
+    next_planner_time = torch.zeros((BATCH_SIZE, 1), device=device)
     # print(target_net(non_final_next_states))
     nxt_state_img_batch = torch.cat(non_final_next_state_batch.img)
     nxt_state_max_consec_exec_batch = torch.cat(non_final_next_state_batch.maxConsecExecuted, dim=0).reshape((
@@ -162,23 +154,29 @@ def optimize_model():
         number_of_non_final_states, 17))
     nxt_state_t_left_ep_batch = torch.cat(non_final_next_state_batch.time_left_ep).reshape((
         number_of_non_final_states, 1))
-    targ_output_p, targ_output_t = target_net(nxt_state_img_batch, None, nxt_state_max_consec_exec_batch,
-                                              nxt_state_curr_exec_batch, nxt_state_t_left_ep_batch)
-    for i in range(len(targ_output_p)):
-        next_state_values[i] = torch.max(targ_output_p[i])
+    targ_out_p, targ_out_t = target_net(nxt_state_img_batch, None, nxt_state_max_consec_exec_batch,
+                                        nxt_state_curr_exec_batch, nxt_state_t_left_ep_batch)
+    for i in range(len(targ_out_p)):
+        next_state_values[i] = torch.max(targ_out_p[i])
 
-    # TODO check below and line 183
-    next_state_Values[non_final_mask] = next_state_values.detach()
+    next_state_Values[non_final_mask] = next_state_values
+    next_planner_time[non_final_mask] = targ_out_t
+    # print(next_state_Values)
     # TODO google reinforcement learning incorperate time (continous output value) into loss???
     # Compute the expected Q values
-    expected_state_action_values = (next_state_Values * GAMMA) + reward_batch
+    expected_state_action_values = (next_state_Values.reshape(124, 1) * GAMMA) + reward_batch
+    expected_Times = (next_planner_time * GAMMA) + reward_batch  # ???
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
+    criterion_t = nn.SmoothL1Loss()
     loss = criterion(state_action_values.unsqueeze(1), expected_state_action_values.unsqueeze(1))
-
+    loss_t = criterion_t(state_time_alloc_Values.unsqueeze(1).reshape(124, 1), expected_Times.unsqueeze(1).reshape(124, 1))
     # Optimize the model
     optimizer.zero_grad()
-    loss.backward()
+    print("start backpropogate")
+    loss.backward(retain_graph=True)
+    loss_t.backward()
+    print("finish backpropogate")
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
@@ -210,7 +208,6 @@ def select_action(select_action_State):
             # t.max(1) will return largest column value of each row.
             # second column on max result is index of where max element was found
             planner_vector, best_planner_runtime = policy_net(*select_action_State)
-            # TODO neural network outputs negative time sometimes how to fix??? --> in reward function
             return planner_vector.max(1)[1].view(1, 1), best_planner_runtime
     else:
         timeAlloc = random.random() * select_action_State[4]  # random allocation between 0 and remaining time
@@ -238,7 +235,7 @@ for i_episode in range(num_episodes):
     last_actionNumber = None
     same_action = False
     t = 0
-    while t <= time_left_ep:
+    while t <= time_left_ep - 5:  # to prevent infinitely allocating smaller timeslots
         # Select and perform an action
         action = select_action(state)
         actionNumber = action[0].item()
@@ -257,12 +254,12 @@ for i_episode in range(num_episodes):
             maxConsecExecutedNext = state[2].clone()
             if maxConsecExecutedNext[max_index] < currentlyExecuting[max_index]:
                 maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
-                next_state = (
-                    img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([time_left_ep]))
+                # next_state = (img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([
+                # time_left_ep]))
 
             # create new state
             next_state = (
-                img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([time_left_ep]))
+            img, current_task_index, maxConsecExecutedNext, currentlyExecuting, torch.tensor([time_left_ep]))
 
         else:
             # next state is final
