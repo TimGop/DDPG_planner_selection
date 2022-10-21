@@ -18,16 +18,19 @@ Transition = namedtuple('Transition',
 trainingSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
 
+taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+
 
 class DQN(nn.Module):
 
     def __init__(self, h, w, outputs):
         super(DQN, self).__init__()
+        # TODO why 128 out-channels
         self.conv2d = nn.Conv2d(1, 128, kernel_size=(2, 2), stride=(1, 1))
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
-        num = 2064547 - h - w
+        num = 547 - h - w
         linear_input_size = num + h + w  # linear_input_size = 194723 essentially just used this to remove unused args
         self.headPlanner = nn.Linear(linear_input_size, outputs - 1)
         self.headTime = nn.Linear(linear_input_size, 1)
@@ -36,9 +39,11 @@ class DQN(nn.Module):
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
 
     def forward(self, f_state):  # implementation with single input arg seems to be faster
+        # TODO improve reward function
+        # TODO speed comparison in network Conv2D bottleneck???
+        # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
         # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward (the rest isnt meaningful)
-        # TODO write a method to test the network at the bottom!!!
-        # TODO think about reward function
+        #  also: do we need 128 output channels to conv. layer?
         # TODO implement better loss functions for task such as cat. cross-etropy loss for discrete class categorization
         # TODO compare batch input size to reinforcement-q-learning.py
         if type(f_state) is list:
@@ -54,7 +59,7 @@ class DQN(nn.Module):
                 x_additional = x_additional.reshape(1, -1)
                 x_Final_Layer = torch.cat((x, x_additional), dim=-1)
                 ret_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-                t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+                t_list.append(torch.abs(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
             return ret_list, t_list
 
         x = f_state[0]
@@ -65,7 +70,7 @@ class DQN(nn.Module):
         x_additional = x_additional.reshape(1, -1)  # transpose
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
         # reminder: state=(img, currentTaskName, maxConsecExecuted, currentlyExecuting, time_left_ep)
-        return torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))), torch.relu(
+        return torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))), torch.abs(
             self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
 
 
@@ -112,6 +117,7 @@ steps_done = 0
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
+    # print("optimize()")
     transitions = memory.sample(BATCH_SIZE)
     # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
     # detailed explanation). This converts batch-array of Transitions
@@ -143,9 +149,8 @@ def optimize_model():
 
     # below: get corresponding value from each output vector i in batch corrsponding to action in actionbatch at index i
     # and append them to a list --> state_action_values
-    print("start time")
+
     nn_output_vectors, nn_output_time = policy_net(state_batch)
-    print("finish time")
     state_action_values = []
     for i in range(0, len(action_batch)):
         state_action_values.append(nn_output_vectors[i][0][action_batch[i][0].item()])
@@ -177,10 +182,8 @@ def optimize_model():
     loss_t = criterion_t(state_time_alloc_Values.unsqueeze(1).reshape(124, 1), expected_Times.unsqueeze(1))
     # Optimize the model
     optimizer.zero_grad()
-    print("start backpropogate")
     loss.backward(retain_graph=True)
     loss_t.backward()
-    print("finish backpropogate")
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
@@ -196,7 +199,7 @@ def reward(taskIndex, actionNo, actionT):
 
 
 resize = T.Compose([T.ToPILImage(),
-                    # T.Resize(40, interpolation=Image.CUBIC),
+                    T.Resize(3, interpolation=Image.CUBIC),
                     T.ToTensor()])
 
 
@@ -218,11 +221,80 @@ def select_action(select_action_State):
         return actionNo, torch.tensor([[timeAlloc]])  # .detach()
 
 
-num_episodes = len(trainingSet) * 2
 
-taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+
+
+
+
+
+testSet = p.read_csv(
+    "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
+
+print("start testing...")
+
+minTimeReq_best_planner_list_test = testSet.min(axis=1)
+num_of_tests = len(testSet)
+rewardTotal = 0
+number_of_passes = 0
+number_correct = 0
+number_incorrect = 0
+for task_i_idx in range(num_of_tests):
+    time_left_ep = 1800
+    maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+    currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+    current_task_index = task_i_idx
+    currentTaskName = testSet.iloc[current_task_index][0]
+    currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
+    img = read_image(currentTaskLoc)
+    img = np.ascontiguousarray(img, dtype=np.float32) / 255
+    img = torch.from_numpy(img)
+    img = resize(img).unsqueeze(0)
+    state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
+    minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[current_task_index]
+    prevActionIdx = None
+    while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
+        actionVector, ActionTime = policy_net(state)
+        action_idx = actionVector.max(1)[1].view(1, 1)
+        rewardTotal += reward(current_task_index, action_idx.item(), ActionTime)[0]
+        number_of_passes += 1
+        if testSet.iloc[current_task_index][action_idx.item() + 1] > ActionTime:
+            number_incorrect += 1
+            # action hasnt led to goal continue
+            if prevActionIdx is action_idx:
+                currentlyExecuting[action_idx] += ActionTime.item()
+            else:
+                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+                currentlyExecuting[action_idx] += ActionTime.item()
+            time_left_ep -= ActionTime
+            if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
+                maxConsecExecuted[action_idx] = currentlyExecuting[action_idx]
+            state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
+        else:
+            number_correct += 1
+            # action leads to goal
+            break
+        prevActionIdx = action_idx
+print("average reward="+str((rewardTotal/number_of_passes)))
+print("percentage correct="+str((number_correct/number_of_passes)*100)+"%")
+print("percentage incorrect="+str((number_incorrect/number_of_passes)*100)+"%")
+print("number of passes="+str(number_of_passes))
+
+print("finished testing")
+print()
+print()
+
+
+
+
+
+# TRAINING
+num_episodes = 3000  # up to 4000 if possible later
+
+minTimeReq_best_planner_list_train = trainingSet.min(axis=1)
+
 for i_episode in range(num_episodes):
-    time_left_ep = 300
+    print("episode " + str(i_episode))
+    time_left_ep = 1800
     maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
     currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
     current_task_index = math.floor(random.random() * len(trainingSet))  # pick a random task in training set
@@ -236,8 +308,10 @@ for i_episode in range(num_episodes):
     state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))  # .detach()
     last_actionNumber = None
     same_action = False
-    t = 0
-    while t <= time_left_ep - 1:  # to make sure we dont search forever on smaller and smaller time schedules
+    num_passes = 0
+    minTimeReq_best_planner_trainSet = minTimeReq_best_planner_list_train[current_task_index]
+    while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
+        num_passes += 1
         # Select and perform an action
         action = select_action(state)
         actionNumber = action[0].item()
@@ -276,9 +350,10 @@ for i_episode in range(num_episodes):
 
         if done:
             break
+    print(num_passes)
     # Update the target network, copying all weights and biases in DQN
     if i_episode % TARGET_UPDATE == 0:
         print("update target network...")
         target_net.load_state_dict(policy_net.state_dict())
 
-print('Completed Training...')
+print('Completed training...')
