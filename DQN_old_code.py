@@ -1,11 +1,11 @@
 import math
+import time
 
 import numpy as np
 import pandas as p
 import torch
 import torch.nn as nn
 import torch.optim as opt
-from itertools import count
 import random
 from collections import namedtuple, deque
 from torchvision.io import read_image
@@ -40,7 +40,8 @@ class DQN(nn.Module):
 
     def forward(self, f_state):  # implementation with single input arg seems to be faster
         # TODO improve reward function
-        # TODO speed comparison in network Conv2D bottleneck???
+        # TODO speed comparison in network Conv2D bottleneck??? use time.time() in sections
+        # TODO make test function plot average reward (y) against passes through the network at end
         # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
         # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward (the rest isnt meaningful)
         #  also: do we need 128 output channels to conv. layer?
@@ -189,12 +190,22 @@ def optimize_model():
 
 
 def reward(taskIndex, actionNo, actionT, time_left_episode, df):
-    minTimeReq = df.iloc[taskIndex][actionNo + 1]
+    minTimeReq = df.iloc[taskIndex][actionNo + 1]  # min time for planner actionNo
+    minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()  # min time out of all planners for given task
+    actionTval = actionT.item()  # current time allocated to planner for solving current task
     # actionNo.item+1 because first column is name
-    if minTimeReq <= actionT.item():
-        return torch.tensor([[1]], dtype=torch.int), True
+    if float(minTimeReq) <= actionTval:
+        # interpolate between 0.5 and 1 based on:
+        # 0.5*(minTimeBestPlanner/minTimeSelectedPlanner)+0.5
+        return torch.tensor([[0.5*(minTimeReq_anyPlanner/actionT)+0.5]], dtype=torch.float), True
+    elif minTimeReq <= time_left_episode:
+        # interpolate betweeen 0 and 0.5 based on:
+        #  (1-((t_bestplanner-t_neededcurrentplanner)/t_neededcurrentplanner)) * 0.5
+        return torch.tensor([[(1-((minTimeReq-minTimeReq_anyPlanner)/minTimeReq))*0.5]], dtype=torch.float), False
+    elif float(minTimeReq_anyPlanner) <= actionTval:
+        return torch.tensor([[-0.5]], dtype=torch.float), False
     else:
-        return torch.tensor([[-1]], dtype=torch.int), False
+        return torch.tensor([[-1]], dtype=torch.float), False
 
 
 resize = T.Compose([T.ToPILImage(),
@@ -224,6 +235,7 @@ testSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
 
 print("start testing...")
+tic = time.time()
 
 minTimeReq_best_planner_list_test = testSet.min(axis=1)
 num_of_tests = len(testSet)
@@ -248,7 +260,8 @@ for task_i_idx in range(num_of_tests):
     while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
         actionVector, ActionTime = policy_net(state)
         action_idx = actionVector.max(1)[1].view(1, 1)
-        rewardTotal += reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
+        currReward = reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
+        rewardTotal += currReward
 
         # actionNo.item+1 because first column is name
         number_of_passes += 1
@@ -270,12 +283,12 @@ for task_i_idx in range(num_of_tests):
             # action leads to goal
             break
         prevActionIdx = action_idx
-print("average reward=" + str((rewardTotal / number_of_passes)))
+print("average reward=" + str((rewardTotal / number_of_passes).item()))
 print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
 print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
 print("number of passes=" + str(number_of_passes))
 
-print("finished testing")
+print("finished testing in "+str(time.time()-tic)+" seconds")
 print()
 print()
 
