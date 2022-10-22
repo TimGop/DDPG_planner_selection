@@ -45,7 +45,6 @@ class DQN(nn.Module):
         # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward (the rest isnt meaningful)
         #  also: do we need 128 output channels to conv. layer?
         # TODO implement better loss functions for task such as cat. cross-etropy loss for discrete class categorization
-        # TODO compare batch input size to reinforcement-q-learning.py
         if type(f_state) is list:
             # then f_state is a batch of states
             ret_list = []
@@ -189,8 +188,8 @@ def optimize_model():
     optimizer.step()
 
 
-def reward(taskIndex, actionNo, actionT):
-    minTimeReq = trainingSet.iloc[taskIndex][actionNo + 1]
+def reward(taskIndex, actionNo, actionT, time_left_episode, df):
+    minTimeReq = df.iloc[taskIndex][actionNo + 1]
     # actionNo.item+1 because first column is name
     if minTimeReq <= actionT.item():
         return torch.tensor([[1]], dtype=torch.int), True
@@ -221,12 +220,6 @@ def select_action(select_action_State):
         return actionNo, torch.tensor([[timeAlloc]])  # .detach()
 
 
-
-
-
-
-
-
 testSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
 
@@ -255,7 +248,9 @@ for task_i_idx in range(num_of_tests):
     while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
         actionVector, ActionTime = policy_net(state)
         action_idx = actionVector.max(1)[1].view(1, 1)
-        rewardTotal += reward(current_task_index, action_idx.item(), ActionTime)[0]
+        rewardTotal += reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
+
+        # actionNo.item+1 because first column is name
         number_of_passes += 1
         if testSet.iloc[current_task_index][action_idx.item() + 1] > ActionTime:
             number_incorrect += 1
@@ -263,7 +258,8 @@ for task_i_idx in range(num_of_tests):
             if prevActionIdx is action_idx:
                 currentlyExecuting[action_idx] += ActionTime.item()
             else:
-                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                  dtype=torch.float)
                 currentlyExecuting[action_idx] += ActionTime.item()
             time_left_ep -= ActionTime
             if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
@@ -274,18 +270,14 @@ for task_i_idx in range(num_of_tests):
             # action leads to goal
             break
         prevActionIdx = action_idx
-print("average reward="+str((rewardTotal/number_of_passes)))
-print("percentage correct="+str((number_correct/number_of_passes)*100)+"%")
-print("percentage incorrect="+str((number_incorrect/number_of_passes)*100)+"%")
-print("number of passes="+str(number_of_passes))
+print("average reward=" + str((rewardTotal / number_of_passes)))
+print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
+print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
+print("number of passes=" + str(number_of_passes))
 
 print("finished testing")
 print()
 print()
-
-
-
-
 
 # TRAINING
 num_episodes = 3000  # up to 4000 if possible later
@@ -318,7 +310,7 @@ for i_episode in range(num_episodes):
         actionTime = action[1]
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
-        rewardVal, done = reward(state[1], actionNumber, actionTime)
+        rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
         if not done:
             time_left_ep -= actionTime
             if same_action:
