@@ -39,27 +39,49 @@ class DQN(nn.Module):
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
 
     def forward(self, f_state):  # implementation with single input arg seems to be faster
-        # TODO improve reward function
-        # TODO speed comparison in network Conv2D bottleneck??? use time.time() in sections
-        # TODO make test function plot average reward (y) against passes through the network at end
+        # TODO speed comparison in network Conv2D bottleneck??? use time.time() in sections TODAY!!!
+        # TODO make test function plot average reward (y) against passes through the network at end TODAY???
         # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
         # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward (the rest isnt meaningful)
         #  also: do we need 128 output channels to conv. layer?
         # TODO implement better loss functions for task such as cat. cross-etropy loss for discrete class categorization
+        # TODO improve reward function
         if type(f_state) is list:
             # then f_state is a batch of states
             ret_list = []
             t_list = []
+            tic1 = 0
+            tic2 = 0
+            tic3 = 0
+            tic4 = 0
+            lastTime = time.time()
             for i_state in f_state:
+                lastTime = time.time()
                 x = i_state[0]  # img
                 x = x.to(device)
+
+                t = time.time()
+                tic1 += t - lastTime
+                lastTime = t
                 x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+                t = time.time()
+                tic2 += t - lastTime
+                lastTime = t
                 # added additional state info below for linear layer
                 x_additional = torch.cat((i_state[2], i_state[3], i_state[4]))
                 x_additional = x_additional.reshape(1, -1)
                 x_Final_Layer = torch.cat((x, x_additional), dim=-1)
+                t = time.time()
+                tic3 += t - lastTime
+                lastTime = t
                 ret_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
                 t_list.append(torch.abs(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+                t = time.time()
+                tic4 += t - lastTime
+            print("tic1:"+str(tic1))
+            print("tic2:"+str(tic2))
+            print("tic3:"+str(tic3))
+            print("tic4:"+str(tic4))
             return ret_list, t_list
 
         x = f_state[0]
@@ -197,11 +219,12 @@ def reward(taskIndex, actionNo, actionT, time_left_episode, df):
     if float(minTimeReq) <= actionTval:
         # interpolate between 0.5 and 1 based on:
         # 0.5*(minTimeBestPlanner/minTimeSelectedPlanner)+0.5
-        return torch.tensor([[0.5*(minTimeReq_anyPlanner/actionT)+0.5]], dtype=torch.float), True
+        return torch.tensor([[0.5 * (minTimeReq_anyPlanner / actionT) + 0.5]], dtype=torch.float), True
     elif minTimeReq <= time_left_episode:
         # interpolate betweeen 0 and 0.5 based on:
         #  (1-((t_bestplanner-t_neededcurrentplanner)/t_neededcurrentplanner)) * 0.5
-        return torch.tensor([[(1-((minTimeReq-minTimeReq_anyPlanner)/minTimeReq))*0.5]], dtype=torch.float), False
+        return torch.tensor([[(1 - ((minTimeReq - minTimeReq_anyPlanner) / minTimeReq)) * 0.5]],
+                            dtype=torch.float), False
     elif float(minTimeReq_anyPlanner) <= actionTval:
         return torch.tensor([[-0.5]], dtype=torch.float), False
     else:
@@ -231,66 +254,66 @@ def select_action(select_action_State):
         return actionNo, torch.tensor([[timeAlloc]])  # .detach()
 
 
-testSet = p.read_csv(
-    "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
-
-print("start testing...")
-tic = time.time()
-
-minTimeReq_best_planner_list_test = testSet.min(axis=1)
-num_of_tests = len(testSet)
-rewardTotal = 0
-number_of_passes = 0
-number_correct = 0
-number_incorrect = 0
-for task_i_idx in range(num_of_tests):
-    time_left_ep = 1800
-    maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-    currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-    current_task_index = task_i_idx
-    currentTaskName = testSet.iloc[current_task_index][0]
-    currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
-    img = read_image(currentTaskLoc)
-    img = np.ascontiguousarray(img, dtype=np.float32) / 255
-    img = torch.from_numpy(img)
-    img = resize(img).unsqueeze(0)
-    state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
-    minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[current_task_index]
-    prevActionIdx = None
-    while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
-        actionVector, ActionTime = policy_net(state)
-        action_idx = actionVector.max(1)[1].view(1, 1)
-        currReward = reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
-        rewardTotal += currReward
-
-        # actionNo.item+1 because first column is name
-        number_of_passes += 1
-        if testSet.iloc[current_task_index][action_idx.item() + 1] > ActionTime:
-            number_incorrect += 1
-            # action hasnt led to goal continue
-            if prevActionIdx is action_idx:
-                currentlyExecuting[action_idx] += ActionTime.item()
-            else:
-                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                  dtype=torch.float)
-                currentlyExecuting[action_idx] += ActionTime.item()
-            time_left_ep -= ActionTime
-            if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
-                maxConsecExecuted[action_idx] = currentlyExecuting[action_idx]
-            state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
-        else:
-            number_correct += 1
-            # action leads to goal
-            break
-        prevActionIdx = action_idx
-print("average reward=" + str((rewardTotal / number_of_passes).item()))
-print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
-print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
-print("number of passes=" + str(number_of_passes))
-
-print("finished testing in "+str(time.time()-tic)+" seconds")
-print()
-print()
+# testSet = p.read_csv(
+#     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
+#
+# print("start testing...")
+# tic = time.time()
+#
+# minTimeReq_best_planner_list_test = testSet.min(axis=1)
+# num_of_tests = len(testSet)
+# rewardTotal = 0
+# number_of_passes = 0
+# number_correct = 0
+# number_incorrect = 0
+# for task_i_idx in range(num_of_tests):
+#     time_left_ep = 1800
+#     maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+#     currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+#     current_task_index = task_i_idx
+#     currentTaskName = testSet.iloc[current_task_index][0]
+#     currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
+#     img = read_image(currentTaskLoc)
+#     img = np.ascontiguousarray(img, dtype=np.float32) / 255
+#     img = torch.from_numpy(img)
+#     img = resize(img).unsqueeze(0)
+#     state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
+#     minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[current_task_index]
+#     prevActionIdx = None
+#     while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
+#         actionVector, ActionTime = policy_net(state)
+#         action_idx = actionVector.max(1)[1].view(1, 1)
+#         currReward = reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
+#         rewardTotal += currReward
+#
+#         # actionNo.item+1 because first column is name
+#         number_of_passes += 1
+#         if testSet.iloc[current_task_index][action_idx.item() + 1] > ActionTime:
+#             number_incorrect += 1
+#             # action hasnt led to goal continue
+#             if prevActionIdx is action_idx:
+#                 currentlyExecuting[action_idx] += ActionTime.item()
+#             else:
+#                 currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#                                                   dtype=torch.float)
+#                 currentlyExecuting[action_idx] += ActionTime.item()
+#             time_left_ep -= ActionTime
+#             if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
+#                 maxConsecExecuted[action_idx] = currentlyExecuting[action_idx]
+#             state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
+#         else:
+#             number_correct += 1
+#             # action leads to goal
+#             break
+#         prevActionIdx = action_idx
+# print("average reward=" + str((rewardTotal / number_of_passes).item()))
+# print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
+# print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
+# print("number of passes=" + str(number_of_passes))
+#
+# print("finished testing in "+str(time.time()-tic)+" seconds")
+# print()
+# print()
 
 # TRAINING
 num_episodes = 3000  # up to 4000 if possible later
