@@ -1,5 +1,6 @@
 import math
 
+import time
 import numpy as np
 import pandas as p
 import torch
@@ -36,19 +37,39 @@ class DQN(nn.Module):
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
-    def forward(self, x_image, x_task_index, x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep):
+    def forward(self, x_image, _, x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep):  # unused arg _ is taskindex
+        tic1 = 0
+        tic2 = 0
+        tic3 = 0
+        tic4 = 0
+        lastTime = time.time()
         x = x_image
         x = x.to(device)
+        currTime = time.time()
+        tic1 += currTime - lastTime
+        lastTime = currTime
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        currTime = time.time()
+        tic2 += currTime - lastTime
+        lastTime = currTime
         if len(x_time_left_ep) > 50:  # is a batch
             x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=1)
         else:
             x_additional = torch.cat((x_ConsecExecuted, x_currentlyExecuting, x_time_left_ep), dim=0)
             x_additional = x_additional.reshape(1, -1)  # transpose
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
+        currTime = time.time()
+        tic3 += currTime - lastTime
+        lastTime = currTime
         # reminder: state=(img, currentTaskIndex, maxConsecExecuted, currentlyExecuting, time_left_ep)
         outp = torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
         outt = torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+        currTime = time.time()
+        tic4 += currTime - lastTime
+        print("tic1:" + str(tic1))
+        print("tic2:" + str(tic2))
+        print("tic3:" + str(tic3))
+        print("tic4:" + str(tic4))
         return outp, outt
 
 
