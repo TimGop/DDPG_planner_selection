@@ -38,22 +38,21 @@ class DQN(nn.Module):
         NumAdditionalArgsLinLayer = 35
         # NumAdditionalArgsLinLayer: For each planner currently executing and max consecutively executing (2*17)
         #                            plus 1 more for time remaining in episode --> (2*17+1=35)
-        linear_input_size = ((h - 1) * (w - 1) * 128) + NumAdditionalArgsLinLayer
+        linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
         self.headPlanner = nn.Linear(linear_input_size, outputs - 1)
         self.headTime = nn.Linear(linear_input_size, 1)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
 
-    def forward(self, f_state):  # implementation with single input arg seems to be faster
-        # speed comparison in network Conv2D bottleneck
-        # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
-        # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward (the rest isnt meaningful)
-        #  also: do we need 128 output channels to conv. layer?
+    def forward(self, f_state):  # implementation with single input arg seems to be faster at the moment
+        # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward --> HOW!?!?!?!
+        # DQN_planner_choice and DQN old code compare speeds in forward() --> bottleneck in layers???(cant control)
         # TODO implement better loss functions for task such as cat. cross-etropy loss for discrete class categorization
-        # TODO improve reward function
+        # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
+        # TODO improve reward function (can still be improved-->greater penalty for massively undershooting timelimit?)
         if type(f_state) is list:
-            # then f_state is a batch of states
+            # f_state is a batch of states
             ret_list = []
             t_list = []
             tic1 = 0
@@ -88,11 +87,10 @@ class DQN(nn.Module):
             print("tic3:" + str(tic3))
             print("tic4:" + str(tic4))
             return ret_list, t_list
-
+        # f_state is a single state
         x = f_state[0]
         x = x.to(device)
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-        # added additional state info below for linear layer
         x_additional = torch.cat((f_state[2], f_state[3], f_state[4]))
         x_additional = x_additional.reshape(1, -1)  # transpose
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
@@ -253,6 +251,12 @@ def select_action(select_action_State):
         return actionNo, torch.tensor([[timeAlloc]])  # .detach()
 
 
+def randAction(timeLeft):
+    timeAlloc = random.random() * timeLeft
+    actionNo = torch.tensor([[random.randrange(n_actions)]], device=device)
+    return actionNo, torch.tensor([[timeAlloc]])
+
+
 testSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
 
@@ -262,10 +266,14 @@ tic = time.time()
 minTimeReq_best_planner_list_test = testSet.min(axis=1)
 num_of_tests = len(testSet)
 rewardTotal = 0
+rand_rewardTotal = 0
 number_of_passes = 0
 number_correct = 0
+rand_number_correct = 0
 number_incorrect = 0
+rand_number_incorrect = 0
 averageRewards = []
+randAverageRewards = []
 passes = []
 for task_i_idx in range(num_of_tests):
     time_left_ep = 1800
@@ -282,24 +290,32 @@ for task_i_idx in range(num_of_tests):
     minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[current_task_index]
     prevActionIdx = None
     while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
-        actionVector, ActionTime = policy_net(state)
+        actionVector, Action_t = policy_net(state)
         action_idx = actionVector.max(1)[1].view(1, 1)
-        currReward = reward(current_task_index, action_idx.item(), ActionTime, time_left_ep, testSet)[0]
+        randAct_idx, randAct_t = randAction(state[4])
+        currReward = reward(current_task_index, action_idx.item(), Action_t, time_left_ep, testSet)[0]
+        rand_currReward = reward(current_task_index, randAct_idx.item(), randAct_t, time_left_ep, testSet)[0]
         rewardTotal += currReward
+        rand_rewardTotal += rand_currReward
         averageRewards.append(rewardTotal / number_of_passes)
+        randAverageRewards.append(rand_rewardTotal / number_of_passes)
         passes.append(number_of_passes)
         number_of_passes += 1
         # actionNo.item+1 because first column is name
-        if testSet.iloc[current_task_index][action_idx.item() + 1] > ActionTime:
+        if testSet.iloc[current_task_index][action_idx.item() + 1] > randAct_t:
+            rand_number_incorrect += 1
+        else:
+            rand_number_correct += 1
+        if testSet.iloc[current_task_index][action_idx.item() + 1] > Action_t:
             number_incorrect += 1
             # action hasnt led to goal continue
             if prevActionIdx is action_idx:
-                currentlyExecuting[action_idx] += ActionTime.item()
+                currentlyExecuting[action_idx] += Action_t.item()
             else:
                 currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                                                   dtype=torch.float)
-                currentlyExecuting[action_idx] += ActionTime.item()
-            time_left_ep -= ActionTime
+                currentlyExecuting[action_idx] += Action_t.item()
+            time_left_ep -= Action_t
             if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
                 maxConsecExecuted[action_idx] = currentlyExecuting[action_idx]
             state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
@@ -311,12 +327,16 @@ for task_i_idx in range(num_of_tests):
 print("average reward=" + str((rewardTotal / number_of_passes).item()))
 print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
 print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
+print("randomAction percentage correct=" + str((rand_number_correct / number_of_passes) * 100) + "%")
+print("randomAction percentage incorrect=" + str((rand_number_incorrect / number_of_passes) * 100) + "%")
 print("number of passes=" + str(number_of_passes))
 # plotting average reward development throughout test set
-plt.plot(passes, averageRewards)
+plt.plot(passes, averageRewards, label="policy network")
+plt.plot(passes, randAverageRewards, label="random decisions")
 plt.xlabel('number of calls to forward')
 plt.ylabel('average reward')
 plt.title('average rewards while testing DQN:')
+plt.legend()
 plt.show()
 
 print("finished testing in " + str(time.time() - tic) + " seconds")
