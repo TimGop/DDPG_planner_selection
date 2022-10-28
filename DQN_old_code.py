@@ -45,48 +45,27 @@ class DQN(nn.Module):
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
 
     def forward(self, f_state):  # implementation with single input arg seems to be faster at the moment
-        # TODO test and plot after every network update while training(calculate randomBaseline prior)
-        #  + change % correct
-        # TODO improve reward function
+        # ASK!TODO test function also gets stuck on certain tasks why??? -->infinite loop -> time alloc.=0 almost always
         # TODO sequential seperate encoding python file
+        # TODO actions with continuos output (not quite DQN) --> tuesday read papers
+        # TODO add constant after relu? --> probably a bad idea --> temp fix for testing functionality currently
         # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward --> HOW!?!?!?!
-        # DQN_planner_choice and DQN old code compare speeds in forward() --> bottleneck in layers???(cant control)
-        # TODO improve nn learning for time selection (time slots alloc. by nn too small!!!)
         if type(f_state) is list:
             # f_state is a batch of states
             ret_list = []
             t_list = []
-            tic1 = 0
-            tic2 = 0
-            tic3 = 0
-            tic4 = 0
             for i_state in f_state:
-                lastTime = time.time()
                 x = i_state[0]  # img
                 x = x.to(device)
-
-                t = time.time()
-                tic1 += t - lastTime
-                lastTime = t
                 x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-                t = time.time()
-                tic2 += t - lastTime
-                lastTime = t
                 # added additional state info below for linear layer (batch)
                 x_additional = torch.cat((i_state[2], i_state[3], i_state[4]))
                 x_additional = x_additional.reshape(1, -1)
                 x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-                t = time.time()
-                tic3 += t - lastTime
-                lastTime = t
-                ret_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-                t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-                t = time.time()
-                tic4 += t - lastTime
-            print("tic1:" + str(tic1))
-            print("tic2:" + str(tic2))
-            print("tic3:" + str(tic3))
-            print("tic4:" + str(tic4))
+                ret_list.append(torch.softmax(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1)), 1))
+                temp = torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+                # print(x_Final_Layer)
+                t_list.append(temp + 5)
             return ret_list, t_list
         # f_state is a single state
         x = f_state[0]
@@ -95,9 +74,10 @@ class DQN(nn.Module):
         x_additional = torch.cat((f_state[2], f_state[3], f_state[4]))
         x_additional = x_additional.reshape(1, -1)  # transpose
         x_Final_Layer = torch.cat((x, x_additional), dim=-1)
+        temp1 = torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+        # print(x_Final_Layer)
         # reminder: state=(img, currentTaskName, maxConsecExecuted, currentlyExecuting, time_left_ep)
-        return torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))), torch.abs(
-            self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+        return torch.softmax(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1)), 1), temp1 + 5
 
 
 class ReplayMemory(object):
@@ -193,7 +173,8 @@ def optimize_model():
     next_planner_time[non_final_mask] = torch.tensor(targ_output_time)
     # Compute the expected Q values
     expected_state_action_values = (next_state_Values * GAMMA) + reward_batch  # is this still correct for our example?
-    expected_Times = (next_planner_time * GAMMA) + reward_batch  # same question as above??? -(reward_batch)???
+
+    expected_Times = (next_planner_time * GAMMA) + reward_batch  # same question as above??? -->actual times for policy?
     # Compute Huber loss
     criterion = nn.CrossEntropyLoss()
     loss_p = criterion(state_action_values.unsqueeze(1), expected_state_action_values.unsqueeze(1))
@@ -209,25 +190,32 @@ def optimize_model():
     optimizer.step()
 
 
+Tau = 1
+epsilon = 0.2
+time_per_ep = 1800
+
+
 def reward(taskIndex, actionNo, actionT, time_left_episode, df):
-    # TODO make discussed changes
-    minTimeReq = df.iloc[taskIndex][actionNo + 1]  # min time for planner actionNo
-    minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()  # min time out of all planners for given task
-    actionTval = actionT.item()  # current time allocated to planner for solving current task
-    # actionNo.item+1 because first column is name
-    if float(minTimeReq) <= actionTval:
-        # interpolate between 0.5 and 1 based on:
-        # 0.5*(minTimeBestPlanner/minTimeSelectedPlanner)+0.5
-        return torch.tensor([[0.5 * (minTimeReq_anyPlanner / actionT) + 0.5]], dtype=torch.float), True
-    elif minTimeReq <= time_left_episode:
-        # interpolate betweeen 0 and 0.5 based on:
-        #  (1-((t_bestplanner-t_neededcurrentplanner)/t_neededcurrentplanner)) * 0.5
-        return torch.tensor([[(1 - ((minTimeReq - minTimeReq_anyPlanner) / minTimeReq)) * 0.5]],
-                            dtype=torch.float), False
-    elif float(minTimeReq_anyPlanner) <= actionTval:
-        return torch.tensor([[-0.5]], dtype=torch.float), False
+    minTimeReq = df.iloc[taskIndex][actionNo + 1]
+    minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()
+
+    if minTimeReq > time_left_episode:
+        # bad planner
+        if (time_left_episode - actionT) > minTimeReq_anyPlanner:
+            # time left for another planner --> ok bad
+            return torch.tensor([[-epsilon]], dtype=torch.float), False
+        else:
+            # no time left for other planner --> very bad
+            return torch.tensor([[-Tau - epsilon]], dtype=torch.float), False
     else:
-        return torch.tensor([[-1]], dtype=torch.float), False
+        R_p = (np.min([actionT, minTimeReq]) / minTimeReq) * epsilon
+        R_s = 0
+        # good planner
+        if actionT >= minTimeReq:
+            # solved --> very good
+            R_s = (1 - (actionT - minTimeReq) / (time_per_ep - minTimeReq)) * Tau
+        # else R_s stays equal to zero
+        return torch.tensor([[R_s + R_p]], dtype=torch.float), True
 
 
 resize = T.Compose([T.ToPILImage(),
@@ -263,7 +251,7 @@ testSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
 
 
-def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAverageReward):
+def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAverageReward, rand_bool=False):
     print("start testing...")
 
     minTimeReq_best_planner_list_test = testSet.min(axis=1)
@@ -274,7 +262,8 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
     episodeNumbers.append(currentEpisodeNumber)
 
     for task_i_idx in range(num_of_tests):
-        e_time_left_ep = 1800
+        print(task_i_idx)
+        e_time_left_ep = time_per_ep  # 1800
         e_maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
         e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
         e_current_task_index = task_i_idx
@@ -288,7 +277,11 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
         minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[e_current_task_index]
         prevActionIdx = None
         while 0 <= e_time_left_ep - minTimeReq_best_planner_testSet:
-            actionVector, Action_t = policy_net(state)
+            if not rand_bool:
+                actionVector, Action_t = policy_net(state)
+            else:
+                actionVector, Action_t = randAction(e_time_left_ep)
+            # print(Action_t)
             action_idx = actionVector.max(1)[1].view(1, 1)
             currReward = reward(e_current_task_index, action_idx.item(), Action_t, e_time_left_ep, testSet)[0]
             rewardTotal += currReward
@@ -300,121 +293,42 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
                     e_currentlyExecuting[action_idx] += Action_t.item()
                 else:
                     e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                      dtype=torch.float)
+                                                        dtype=torch.float)
                     e_currentlyExecuting[action_idx] += Action_t.item()
                 e_time_left_ep -= Action_t
                 if e_currentlyExecuting[action_idx] > e_maxConsecExecuted[action_idx]:
                     e_maxConsecExecuted[action_idx] = e_currentlyExecuting[action_idx]
-                state = (e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep]))
+                state = (
+                    e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting,
+                    torch.tensor([e_time_left_ep]))
             else:
                 number_correct += 1
                 # action leads to goal
                 break
             prevActionIdx = action_idx
     averageRewards.append((rewardTotal / number_of_passes).item())
-    print(episodeNumbers)
-    print(averageRewards)
-    print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
-    print("average number of passes per task=" + str(number_of_passes / num_of_tests))
-    # plotting average reward development throughout test set
-    if episodeNumbers.__len__() > 1:
-        plt.plot(episodeNumbers, averageRewards, color='g', label="policy network")
-    else:
-        plt.axhline(y=averageRewards[0], color='g', label="policy network")
-    plt.axhline(y=randAverageReward, label="random action baseline")
-    plt.xlabel('number of episodes')
-    plt.ylabel('average reward')
-    plt.title('average rewards while testing DQN:')
-    plt.legend()
-    plt.show()
+    if not rand_bool:
+        print(episodeNumbers)
+        print(averageRewards)
+        print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
+        print("average number of passes per task=" + str(number_of_passes / num_of_tests))
+        # plotting average reward development throughout test set
+        if episodeNumbers.__len__() > 1:
+            plt.plot(episodeNumbers, averageRewards, color='g', label="policy network")
+        else:
+            plt.axhline(y=averageRewards[0], color='g', label="policy network")
+        plt.axhline(y=randAverageReward, label="random action baseline")
+        plt.xlabel('number of episodes')
+        plt.ylabel('average reward')
+        plt.title('average rewards while testing DQN:')
+        plt.legend()
+        plt.show()
     return episodeNumbers, averageRewards
 
 
-# testSet = p.read_csv(
-#     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
-#
-# print("start testing...")
-# tic = time.time()
-#
-# minTimeReq_best_planner_list_test = testSet.min(axis=1)
-# num_of_tests = len(testSet)
-# rewardTotal = 0
-# rand_rewardTotal = 0
-# number_of_passes = 0
-# number_correct = 0
-# rand_number_correct = 0
-# number_incorrect = 0
-# rand_number_incorrect = 0
-# averageRewards = []
-# randAverageRewards = []
-# passes = []
-# for task_i_idx in range(num_of_tests):
-#     time_left_ep = 1800
-#     maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-#     currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-#     current_task_index = task_i_idx
-#     currentTaskName = testSet.iloc[current_task_index][0]
-#     currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
-#     img = read_image(currentTaskLoc)
-#     img = np.ascontiguousarray(img, dtype=np.float32) / 255
-#     img = torch.from_numpy(img)
-#     img = resize(img).unsqueeze(0)
-#     state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
-#     minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[current_task_index]
-#     prevActionIdx = None
-#     while 0 <= time_left_ep - minTimeReq_best_planner_testSet:
-#         actionVector, Action_t = policy_net(state)
-#         action_idx = actionVector.max(1)[1].view(1, 1)
-#         randAct_idx, randAct_t = randAction(state[4])
-#         currReward = reward(current_task_index, action_idx.item(), Action_t, time_left_ep, testSet)[0]
-#         rand_currReward = reward(current_task_index, randAct_idx.item(), randAct_t, time_left_ep, testSet)[0]
-#         rewardTotal += currReward
-#         rand_rewardTotal += rand_currReward
-#         averageRewards.append(rewardTotal / number_of_passes)
-#         randAverageRewards.append(rand_rewardTotal / number_of_passes)
-#         passes.append(number_of_passes)
-#         number_of_passes += 1
-#         # actionNo.item+1 because first column is name
-#         if testSet.iloc[current_task_index][action_idx.item() + 1] > randAct_t:
-#             rand_number_incorrect += 1
-#         else:
-#             rand_number_correct += 1
-#         if testSet.iloc[current_task_index][action_idx.item() + 1] > Action_t:
-#             number_incorrect += 1
-#             # action hasnt led to goal continue
-#             if prevActionIdx is action_idx:
-#                 currentlyExecuting[action_idx] += Action_t.item()
-#             else:
-#                 currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-#                                                   dtype=torch.float)
-#                 currentlyExecuting[action_idx] += Action_t.item()
-#             time_left_ep -= Action_t
-#             if currentlyExecuting[action_idx] > maxConsecExecuted[action_idx]:
-#                 maxConsecExecuted[action_idx] = currentlyExecuting[action_idx]
-#             state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))
-#         else:
-#             number_correct += 1
-#             # action leads to goal
-#             break
-#         prevActionIdx = action_idx
-# print("average reward=" + str((rewardTotal / number_of_passes).item()))
-# print("percentage correct=" + str((number_correct / number_of_passes) * 100) + "%")
-# print("percentage incorrect=" + str((number_incorrect / number_of_passes) * 100) + "%")
-# print("randomAction percentage correct=" + str((rand_number_correct / number_of_passes) * 100) + "%")
-# print("randomAction percentage incorrect=" + str((rand_number_incorrect / number_of_passes) * 100) + "%")
-# print("number of passes=" + str(number_of_passes))
-# # plotting average reward development throughout test set
-# plt.plot(passes, averageRewards, label="policy network")
-# plt.plot(passes, randAverageRewards, label="random decisions")
-# plt.xlabel('number of calls to forward')
-# plt.ylabel('average reward')
-# plt.title('average rewards while testing DQN:')
-# plt.legend()
-# plt.show()
-#
-# print("finished testing in " + str(time.time() - tic) + " seconds")
-# print()
-# print()
+# calculate random action baseline prior to TRAINING
+__, average_Reward = evaluateNetwork([], [], 0, 0, rand_bool=True)
+rand_a_baseline = average_Reward[0]
 
 # TRAINING
 num_episodes = 3000  # up to 4000 if possible later
@@ -423,9 +337,10 @@ minTimeReq_best_planner_list_train = trainingSet.min(axis=1)
 
 episodeList = []
 averageRewardList = []
+
 for i_episode in range(num_episodes):
     print("episode " + str(i_episode))
-    time_left_ep = 1800
+    time_left_ep = time_per_ep
     maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
     currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
     current_task_index = math.floor(random.random() * len(trainingSet))  # pick a random task in training set
@@ -486,6 +401,7 @@ for i_episode in range(num_episodes):
     if i_episode % TARGET_UPDATE == 0:
         print("update target network & Test network...")
         target_net.load_state_dict(policy_net.state_dict())
-        episodeList, averageRewardList = evaluateNetwork(episodeList, averageRewardList, i_episode, -0.25)
+        if len(memory) >= BATCH_SIZE:
+            episodeList, averageRewardList = evaluateNetwork(episodeList, averageRewardList, i_episode, rand_a_baseline)
 
 print('Completed training...')
