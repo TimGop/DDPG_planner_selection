@@ -1,13 +1,26 @@
-# TODO rewrite
 import torch
+import random
 import numpy as np
+import pandas as p
 from torchvision.io import read_image
+from DDPG_reward import reward
+import matplotlib.pyplot as plt
+from Replay_Memory_and_utils import resize
+
+testSet = p.read_csv("C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
+taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
 
 
-def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAverageReward, rand_bool=False,
-                    time_per_ep=1800):
+def randAction(timeLeft, n_actions):
+    timeAlloc = random.random() * timeLeft
+    actionNo = torch.tensor([[random.randrange(n_actions)]])
+    return actionNo, torch.tensor([[timeAlloc]])
+
+
+def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent, randAverageReward, rand_bool=False,
+                    time_per_ep=1800, n_actions=17):
     print("start testing...")
-
+    agent.set_eval()
     minTimeReq_best_planner_list_test = testSet.min(axis=1)
     num_of_tests = len(testSet)
     rewardTotal = 0
@@ -32,16 +45,19 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
         prevActionIdx = None
         while 0 <= e_time_left_ep - minTimeReq_best_planner_testSet:
             if not rand_bool:
-                actionVector, Action_t = policy_net(state)
+                actionVector, Action_t = agent.get_action(state)
+                print(Action_t)
             else:
-                actionVector, Action_t = randAction(e_time_left_ep)
-            # print(Action_t)
+                actionVector, Action_t = randAction(e_time_left_ep, n_actions)
             action_idx = actionVector.max(1)[1].view(1, 1)
             currReward = reward(e_current_task_index, action_idx.item(), Action_t, e_time_left_ep, testSet)[0]
             rewardTotal += currReward
             number_of_passes += 1
             # actionNo.item+1 because first column is name
-            if testSet.iloc[e_current_task_index][action_idx.item() + 1] > Action_t:
+            if Action_t.item() == 0:
+                # to avoid infinite loops
+                break
+            elif testSet.iloc[e_current_task_index][action_idx.item() + 1] > Action_t:
                 # action hasnt led to goal continue
                 if prevActionIdx is action_idx:
                     e_currentlyExecuting[action_idx] += Action_t.item()
@@ -57,7 +73,7 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
                     torch.tensor([e_time_left_ep]))
             else:
                 number_correct += 1
-                # action leads to goal
+                # action leads to goal i.e. done
                 break
             prevActionIdx = action_idx
     averageRewards.append((rewardTotal / number_of_passes).item())
@@ -77,4 +93,5 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, randAv
         plt.title('average rewards while testing DQN:')
         plt.legend()
         plt.show()
+    agent.set_train()
     return episodeNumbers, averageRewards

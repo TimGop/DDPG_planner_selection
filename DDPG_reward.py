@@ -1,15 +1,16 @@
 import torch
 import numpy as np
 
+ominicron = 0.3
 Theta = 1
 Epsilon = 0.2
 time_per_ep = 1800  # TODO have this passed
 
-# TODO reward=t+omnicron t=0 and epsiode termination
-
-
 
 def reward(taskIndex, actionNo, actionT, time_left_episode, df):
+    if actionT == 0:
+        return torch.tensor([[-ominicron]], dtype=torch.float), False  # action time is zero
+
     minTimeReq_currPlanner = df.iloc[taskIndex][actionNo + 1]
     minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()
 
@@ -21,6 +22,7 @@ def reward(taskIndex, actionNo, actionT, time_left_episode, df):
         else:
             # no time left for other planner --> very bad
             return torch.tensor([[-Theta - Epsilon]], dtype=torch.float), False
+
     else:
         R_p = (np.min([actionT, minTimeReq_currPlanner]) / minTimeReq_currPlanner) * Epsilon
         R_s = 0

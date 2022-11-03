@@ -1,10 +1,19 @@
+import math
+import random
+
 from DDPG_nets import Actor, Critic
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+EPS_START = 0.9
+EPS_END = 0.05
+EPS_DECAY = 200  # try different values?
+
+n_actions = 17
+steps_done = 0
 
 
 def soft_update(target, source, tau):
@@ -18,16 +27,16 @@ def hard_update(target, source):
 
 
 class DDPG(object):
-    def __init__(self, gamma, tau):
+    def __init__(self, gamma, tau, h, w):
         self.gamma = gamma
         self.tau = tau
         # Define the actor
-        self.actor = Actor(128, 128, 17).to(device)
-        self.actor_target = Actor(128, 128, 17).to(device)
+        self.actor = Actor(h, w, 17).to(device)
+        self.actor_target = Actor(h, w, 17).to(device)
 
         # Define the critic
-        self.critic = Critic(128, 128).to(device)
-        self.critic_target = Critic(128, 128).to(device)
+        self.critic = Critic(h, w).to(device)
+        self.critic_target = Critic(h, w).to(device)
 
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
@@ -38,25 +47,28 @@ class DDPG(object):
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
 
-    def act(self, state):
-        # TODO do we need action noise or rand decisions scaled down over time?
+    def get_action(self, select_action_State):
         self.actor.eval()
-        ans = self.actor(state)
+        planner_vector, best_planner_runtime = self.actor(select_action_State)
         self.actor.train()
-        ans = ans.data
+        return planner_vector.max(1)[1].view(1, 1), best_planner_runtime
 
-        # # During training we add noise for exploration
-        # if action_noise is not None:
-        #     noise = torch.Tensor(action_noise.noise()).to(device)
-        #     mu += noise
-
-        # Clip the output according to the action space of the env 0-1800??? --> no bad idea
-        # ans = ans.clamp(0, 1800)
-        return ans
+    def act(self, select_action_State):
+        global steps_done
+        sample = random.random()
+        eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
+        steps_done += 1
+        if sample > eps_threshold:
+            with torch.no_grad():
+                return self.get_action(select_action_State)
+        else:
+            timeAlloc = random.random() * select_action_State[4]  # random allocation between 0 and remaining time
+            actionNo = torch.tensor([[random.randrange(n_actions)]], device=device)
+            return actionNo, torch.tensor([[timeAlloc]])
 
     def update(self, transition_batch):
         self.set_train()
-        state_batch = torch.cat(transition_batch.state).to(device)
+        state_batch = torch.cat(transition_batch.state).to(device)  # TODO problem tuple instead of tensor
         action_batch = torch.cat(transition_batch.action).to(device)
         reward_batch = torch.cat(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
@@ -71,9 +83,6 @@ class DDPG(object):
         done_batch = done_batch.unsqueeze(1)
         expected_values = reward_batch + (1.0 - done_batch) * self.gamma * next_state_action_values
 
-        # TODO: Clipping the expected values here?  ---> why clip expected values???
-        # expected_value = torch.clamp(expected_value, min_value, max_value)
-
         # Update the critic network
         self.critic_optimizer.zero_grad()
         state_action_batch = self.critic(state_batch, action_batch)
@@ -83,7 +92,7 @@ class DDPG(object):
 
         # Update the actor network
         self.actor_optimizer.zero_grad()
-        policy_loss = -self.critic(state_batch, self.actor(state_batch))  # TODO why minus in front???
+        policy_loss = -self.critic(state_batch, self.actor(state_batch))  # minus in front because comes from a q-value
         policy_loss = policy_loss.mean()
         policy_loss.backward()
         self.actor_optimizer.step()
@@ -94,14 +103,14 @@ class DDPG(object):
 
         return value_loss.item(), policy_loss.item()
 
-    def set_eval(self):  # TODO find when used
+    def set_eval(self):  # sets networks to evaluation mode (faster)
         # Sets the model in evaluation mode
         self.actor.eval()
         self.critic.eval()
         self.actor_target.eval()
         self.critic_target.eval()
 
-    def set_train(self):  # TODO find when used
+    def set_train(self):  # sets networks to training mode (needed for learning but slower)
         # Sets the model in training mode
         self.actor.train()
         self.critic.train()
