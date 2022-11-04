@@ -65,7 +65,9 @@ for i_episode in range(num_episodes):
     img = torch.from_numpy(img)
 
     img = resize(img).unsqueeze(0)
-    state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))  # .detach()
+    state = img
+    state_additional = torch.cat((maxConsecExecuted, currentlyExecuting,
+                                  torch.tensor([time_left_ep])))
     last_actionNumber = None
     same_action = False
     num_passes = 0
@@ -73,8 +75,8 @@ for i_episode in range(num_episodes):
     while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
         num_passes += 1
         # Select and perform an action
-        action = agent.act(state)
-        actionNumber = action[0].item()
+        action = agent.act(state, state_additional)
+        actionNumber = round(action[0].item())  # conversion to int
         actionTime = action[1]
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
@@ -87,24 +89,29 @@ for i_episode in range(num_episodes):
                 currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
                 currentlyExecuting[actionNumber] = currentlyExecuting[actionNumber] + actionTime
             max_index = max(range(len(currentlyExecuting)), key=currentlyExecuting.__getitem__)
-            maxConsecExecutedNext = state[2].clone()
-            if maxConsecExecutedNext[max_index] < currentlyExecuting[max_index]:
+            maxConsecExecutedNext = maxConsecExecuted
+            if maxConsecExecutedNext[max_index].item() < currentlyExecuting[max_index].item():
                 maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
             # create new state
-            next_state = (
-                img, current_task_index, maxConsecExecutedNext, currentlyExecuting,
-                torch.tensor([time_left_ep]))  # .detach()
-
+            next_state = img
+            # next_state_additional = (maxConsecExecutedNext, currentlyExecuting,
+            #                          torch.tensor([time_left_ep]))
+            next_state_additional = torch.cat((maxConsecExecutedNext, currentlyExecuting,
+                                               torch.tensor([time_left_ep])))
+            maxConsecExecuted = maxConsecExecutedNext
         else:
             # next state is final
             next_state = None
+            next_state_additional = None
 
         # Store the transition in memory
-        memory.push(state, action, done, next_state, rewardVal)
+        mask = torch.Tensor([done])
+        memory.push(state, state_additional, current_task_index, action, mask, next_state, next_state_additional,
+                    rewardVal)
 
         # Move to the next state
         state = next_state
-
+        state_additional = next_state_additional
         # Perform one step of the optimization (on the policy network)
         if len(memory) > BATCH_SIZE:
             transitions = memory.sample(BATCH_SIZE)

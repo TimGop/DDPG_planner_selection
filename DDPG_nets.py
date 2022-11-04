@@ -24,29 +24,40 @@ class Actor(nn.Module):
         self.headPlanner = nn.Linear(linear_input_size, outputs)  # numoutputs should equal 17 (17 values)
         self.headTime = nn.Linear(linear_input_size, 1)
 
-    def forward(self, f_state):
+    def forward(self, f_state, f_state_additional):
         # f_state is a batch of states
         if type(f_state) is list:
             a_list = []
             t_list = []
-            for i_state in f_state:
-                x = i_state[0]  # img
+            for i in range(len(f_state)):
+                x = f_state[i]  # img
                 x = x.to(device)
                 x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
                 # added additional state info below for linear layer (batch)
-                x_additional = torch.cat((i_state[2], i_state[3], i_state[4]))
-                x_additional = x_additional.reshape(1, -1)
+                x_additional = f_state_additional[i].reshape(1, -1)
                 x_Final_Layer = torch.cat((x, x_additional), dim=-1)
                 a_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
                 t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
             return a_list, t_list
+            # for i_state in f_state:
+            #     x = i_state[0]  # img
+            #     x = x.to(device)
+            #     x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+            #     # added additional state info below for linear layer (batch)
+            #     x_additional = torch.cat((i_state[2], i_state[3], i_state[4]))
+            #     x_additional = x_additional.reshape(1, -1)
+            #     x_Final_Layer = torch.cat((x, x_additional), dim=-1)
+            #     a_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+            #     t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+            # return a_list, t_list
         # f_state is a single state
         else:
-            x = f_state[0]
+            x = f_state
             x = x.to(device)
             x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-            x_additional = torch.cat((f_state[2], f_state[3], f_state[4]))
-            x_additional = x_additional.reshape(1, -1)  # transpose
+            # print(f_state_additional)
+            # x_additional = torch.cat((f_state_additional[0], f_state_additional[1], f_state_additional[2]))
+            x_additional = f_state_additional.reshape(1, -1)  # transpose
             x_Final_Layer = torch.cat((x, x_additional), dim=-1)
             # reminder: state=(img, currentTaskName, maxConsecExecuted, currentlyExecuting, time_left_ep)
             return torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))), torch.relu(

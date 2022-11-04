@@ -47,28 +47,30 @@ class DDPG(object):
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
 
-    def get_action(self, select_action_State):
+    def get_action(self, select_action_State, select_action_State_additional):
         self.actor.eval()
-        planner_vector, best_planner_runtime = self.actor(select_action_State)
+        planner_vector, best_planner_runtime = self.actor(select_action_State, select_action_State_additional)
         self.actor.train()
         return planner_vector.max(1)[1].view(1, 1), best_planner_runtime
 
-    def act(self, select_action_State):
+    def act(self, select_action_State, select_action_State_additional):
         global steps_done
         sample = random.random()
         eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
         steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
-                return self.get_action(select_action_State)
+                return torch.cat(self.get_action(select_action_State, select_action_State_additional))
         else:
-            timeAlloc = random.random() * select_action_State[4]  # random allocation between 0 and remaining time
+            timeAlloc = torch.tensor(
+                [[random.random() * select_action_State_additional[-1]]])  # random allocation 0-rem. time
             actionNo = torch.tensor([[random.randrange(n_actions)]], device=device)
-            return actionNo, torch.tensor([[timeAlloc]])
+            return torch.cat((actionNo, timeAlloc))
 
     def update(self, transition_batch):
         self.set_train()
-        state_batch = torch.cat(transition_batch.state).to(device)  # TODO problem tuple instead of tensor
+        # TODO fix compatibility issues
+        state_batch = torch.cat(transition_batch.state).to(device)
         action_batch = torch.cat(transition_batch.action).to(device)
         reward_batch = torch.cat(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)

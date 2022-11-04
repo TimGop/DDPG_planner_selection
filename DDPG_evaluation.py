@@ -29,7 +29,7 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
     episodeNumbers.append(currentEpisodeNumber)
 
     for task_i_idx in range(num_of_tests):
-        print(task_i_idx)
+        # print(task_i_idx)
         e_time_left_ep = time_per_ep  # 1800
         e_maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
         e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)

@@ -10,7 +10,7 @@ time_per_ep = 1800  # TODO have this passed
 def reward(taskIndex, actionNo, actionT, time_left_episode, df):
     if actionT == 0:
         return torch.tensor([[-ominicron]], dtype=torch.float), False  # action time is zero
-
+    # print("action number: " + str(actionNo))
     minTimeReq_currPlanner = df.iloc[taskIndex][actionNo + 1]
     minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()
 
