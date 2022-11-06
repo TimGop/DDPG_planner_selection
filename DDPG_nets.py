@@ -69,19 +69,24 @@ class Critic(nn.Module):
         self.headQ = nn.Linear(linear_input_size, outputs)  # numoutputs --> single value
 
     def forward(self, f_state, f_state_additional, action):
-        # TODO fix compatibility issues
-        Q_list = []
-        for i in range(len(f_state)):
-            x = f_state[i]  # img
-            x = x.reshape((1, 1, 128, 128))
-            x = x.to(device)
-            x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-            # added additional state info below for linear layer (batch)
-            # print(f_state_additional[i].shape)
-            # print(action[i].shape)
-            x_additional = torch.cat((f_state_additional[i], torch.squeeze(action[i])))
-            x_additional = x_additional.reshape(1, -1)
-            x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-            Q_list.append(torch.sigmoid(self.headQ(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-        Q_list = torch.stack(Q_list)
-        return Q_list
+        x = f_state
+        x.to(device)
+        x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        x_additional = torch.cat((f_state_additional, torch.squeeze(action)), dim=1)
+        x_Final_Layer = torch.cat((x, x_additional), dim=1)
+        return torch.sigmoid(self.headQ(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+        # Q_list = []
+        # for i in range(len(f_state)):
+        #     x = f_state[i]  # img
+        #     x = x.reshape((1, 1, 128, 128))
+        #     x = x.to(device)
+        #     x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        #     # added additional state info below for linear layer (batch)
+        #     # print(f_state_additional[i].shape)
+        #     # print(action[i].shape)
+        #     x_additional = torch.cat((f_state_additional[i], torch.squeeze(action[i])))
+        #     x_additional = x_additional.reshape(1, -1)
+        #     x_Final_Layer = torch.cat((x, x_additional), dim=-1)
+        #     Q_list.append(torch.sigmoid(self.headQ(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+        # Q_list = torch.stack(Q_list)
+        # return Q_list
