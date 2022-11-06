@@ -69,16 +69,21 @@ class DDPG(object):
 
     def update(self, transition_batch):
         self.set_train()
-        # TODO fix compatibility issues
         state_batch = torch.cat(transition_batch.state).to(device)
-        action_batch = torch.cat(transition_batch.action).to(device)
+        state_additional_batch = torch.stack(transition_batch.state_additional).to(device)
+        action_batch = torch.stack(transition_batch.action).to(device)
         reward_batch = torch.cat(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
         next_state_batch = torch.cat(transition_batch.next_state).to(device)
+        next_state_additional_batch = torch.stack(transition_batch.next_state_additional).to(device)
 
         # Get the actions and the state values to compute the targets
-        next_action_batch = self.actor_target(next_state_batch)
-        next_state_action_values = self.critic_target(next_state_batch, next_action_batch.detach())
+        next_action_batch = self.actor_target(next_state_batch, next_state_additional_batch)
+        print("shape next_state_batch: " + str(next_state_batch.shape))
+        print("shape next_state_additional_batch: " + str(next_state_additional_batch.shape))
+        print("shape next_action_batch: " + str(next_action_batch.shape))
+        next_state_action_values = self.critic_target(next_state_batch, next_state_additional_batch,
+                                                      next_action_batch.detach())
 
         # Compute the target
         reward_batch = reward_batch.unsqueeze(1)
@@ -87,14 +92,19 @@ class DDPG(object):
 
         # Update the critic network
         self.critic_optimizer.zero_grad()
-        state_action_batch = self.critic(state_batch, action_batch)
+        # TODO fix memory issues to do with unnecessary tensor creation and allocation to memory
+        print("shape state_batch: "+str(state_batch.shape))
+        print("shape state_additional_batch: "+str(state_additional_batch.shape))
+        print("shape action_batch: "+str(action_batch.shape))
+        state_action_batch = self.critic(state_batch, state_additional_batch, action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
         value_loss.backward()
         self.critic_optimizer.step()
 
         # Update the actor network
         self.actor_optimizer.zero_grad()
-        policy_loss = -self.critic(state_batch, self.actor(state_batch))  # minus in front because comes from a q-value
+        # minus in front below because comes from a q-value
+        policy_loss = -self.critic(state_batch, state_additional_batch, self.actor(state_batch))
         policy_loss = policy_loss.mean()
         policy_loss.backward()
         self.actor_optimizer.step()

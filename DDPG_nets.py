@@ -26,37 +26,27 @@ class Actor(nn.Module):
 
     def forward(self, f_state, f_state_additional):
         # f_state is a batch of states
-        if type(f_state) is list:
-            a_list = []
-            t_list = []
+        if len(f_state) > 2:
+            ret_list = []
             for i in range(len(f_state)):
                 x = f_state[i]  # img
+                x = x.reshape((1, 1, 128, 128))
                 x = x.to(device)
                 x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
                 # added additional state info below for linear layer (batch)
                 x_additional = f_state_additional[i].reshape(1, -1)
                 x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-                a_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-                t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-            return a_list, t_list
-            # for i_state in f_state:
-            #     x = i_state[0]  # img
-            #     x = x.to(device)
-            #     x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-            #     # added additional state info below for linear layer (batch)
-            #     x_additional = torch.cat((i_state[2], i_state[3], i_state[4]))
-            #     x_additional = x_additional.reshape(1, -1)
-            #     x_Final_Layer = torch.cat((x, x_additional), dim=-1)
-            #     a_list.append(torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-            #     t_list.append(torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
-            # return a_list, t_list
-        # f_state is a single state
+                planner = torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))).max(1)[1].view(
+                    1, 1)
+                time = torch.relu(self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)))
+                out = torch.cat((planner, time))
+                ret_list.append(out)
+            ret = torch.stack(ret_list)
+            return ret
         else:
             x = f_state
             x = x.to(device)
             x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-            # print(f_state_additional)
-            # x_additional = torch.cat((f_state_additional[0], f_state_additional[1], f_state_additional[2]))
             x_additional = f_state_additional.reshape(1, -1)  # transpose
             x_Final_Layer = torch.cat((x, x_additional), dim=-1)
             # reminder: state=(img, currentTaskName, maxConsecExecuted, currentlyExecuting, time_left_ep)
@@ -78,15 +68,20 @@ class Critic(nn.Module):
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
         self.headQ = nn.Linear(linear_input_size, outputs)  # numoutputs --> single value
 
-    def forward(self, f_state, action_idx, action_t):
+    def forward(self, f_state, f_state_additional, action):
+        # TODO fix compatibility issues
         Q_list = []
-        for i_state in f_state:
-            x = i_state[0]  # img
+        for i in range(len(f_state)):
+            x = f_state[i]  # img
+            x = x.reshape((1, 1, 128, 128))
             x = x.to(device)
             x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
             # added additional state info below for linear layer (batch)
-            x_additional = torch.cat((i_state[2], i_state[3], i_state[4], action_idx, action_t))
+            # print(f_state_additional[i].shape)
+            # print(action[i].shape)
+            x_additional = torch.cat((f_state_additional[i], torch.squeeze(action[i])))
             x_additional = x_additional.reshape(1, -1)
             x_Final_Layer = torch.cat((x, x_additional), dim=-1)
             Q_list.append(torch.sigmoid(self.headQ(x_Final_Layer.view(x_Final_Layer.size(0), -1))))
+        Q_list = torch.stack(Q_list)
         return Q_list
