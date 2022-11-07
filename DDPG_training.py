@@ -6,17 +6,13 @@ import random
 from DDPG_reward import reward
 from Replay_Memory_and_utils import ReplayMemory, Transition, resize, imageWidth, imageHeight
 from DDPG_evaluation import evaluateNetwork
-
 from torchvision.io import read_image
 from DDPG import DDPG
 
-# change actor network back to layers used and output from the DQN Q network DONE?
-# reward=-omnicron t=0 and epsiode termination DONE?
-# implement training action method (very similiar to the action method in DQN_old_code.py) DONE?
-# finish evaluaton method DONE?
-# TODO fix compatibility errors in agent.update()
-# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?
 # TODO create args object to hold all parameters
+# fix compatibility errors in agent.update() Done?
+# TODO --> Memory insufficient on laptop
+# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 # TODO BONUS: create custom enviroment with openAI gym
 
 trainingSet = p.read_csv(
@@ -65,7 +61,9 @@ for i_episode in range(num_episodes):
     img = torch.from_numpy(img)
 
     img = resize(img).unsqueeze(0)
-    state = (img, current_task_index, maxConsecExecuted, currentlyExecuting, torch.tensor([time_left_ep]))  # .detach()
+    state = img
+    state_additional = torch.cat((maxConsecExecuted, currentlyExecuting,
+                                  torch.tensor([time_left_ep])))
     last_actionNumber = None
     same_action = False
     num_passes = 0
@@ -73,9 +71,10 @@ for i_episode in range(num_episodes):
     while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
         num_passes += 1
         # Select and perform an action
-        action = agent.act(state)
-        actionNumber = action[0].item()
-        actionTime = action[1]
+        action = agent.act(state, state_additional)
+        action = action.view((2, 1))
+        actionNumber = round(action[0][0].item())  # conversion to int
+        actionTime = action[1][0]
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
         rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
@@ -87,40 +86,43 @@ for i_episode in range(num_episodes):
                 currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
                 currentlyExecuting[actionNumber] = currentlyExecuting[actionNumber] + actionTime
             max_index = max(range(len(currentlyExecuting)), key=currentlyExecuting.__getitem__)
-            maxConsecExecutedNext = state[2].clone()
-            if maxConsecExecutedNext[max_index] < currentlyExecuting[max_index]:
+            maxConsecExecutedNext = maxConsecExecuted
+            if maxConsecExecutedNext[max_index].item() < currentlyExecuting[max_index].item():
                 maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
             # create new state
-            next_state = (
-                img, current_task_index, maxConsecExecutedNext, currentlyExecuting,
-                torch.tensor([time_left_ep]))  # .detach()
-
+            next_state = img
+            # next_state_additional = (maxConsecExecutedNext, currentlyExecuting,
+            #                          torch.tensor([time_left_ep]))
+            next_state_additional = torch.cat((maxConsecExecutedNext, currentlyExecuting,
+                                               torch.tensor([time_left_ep])))
+            maxConsecExecuted = maxConsecExecutedNext
         else:
             # next state is final
-            next_state = None
+            next_state = img
+            next_state_additional = torch.zeros((35,))
 
         # Store the transition in memory
-        memory.push(state, action, done, next_state, rewardVal)
+        mask = torch.Tensor([done])
+        memory.push(state, state_additional, current_task_index, action, mask, next_state, next_state_additional,
+                    rewardVal)
 
         # Move to the next state
         state = next_state
-
+        state_additional = next_state_additional
         # Perform one step of the optimization (on the policy network)
-        if len(memory) > BATCH_SIZE:
+        if len(memory) >= BATCH_SIZE:
             transitions = memory.sample(BATCH_SIZE)
             # Transpose the batch
             # (see http://stackoverflow.com/a/19343/3343043 for detailed explanation).
             batch = Transition(*zip(*transitions))
-
             # Update actor and critic according to the batch
             value_loss, policy_loss = agent.update(batch)  # optimize network/s
 
         if done or actionTime == 0:
             break
     if i_episode % EVALUATE == 0:
-        print("testing network...")
         if len(memory) >= BATCH_SIZE:
-            print()
+            print("testing network...")
             episodeList, averageRewardList = evaluateNetwork(episodeList, averageRewardList, i_episode, agent,
                                                              rand_a_baseline)
 
