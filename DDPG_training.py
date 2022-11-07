@@ -10,13 +10,10 @@ from DDPG_evaluation import evaluateNetwork
 from torchvision.io import read_image
 from DDPG import DDPG
 
-# change actor network back to layers used and output from the DQN Q network DONE?
-# reward=-omnicron t=0 and epsiode termination DONE?
-# implement training action method (very similiar to the action method in DQN_old_code.py) DONE?
-# finish evaluaton method DONE?
-# TODO fix compatibility errors in agent.update()
-# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?
 # TODO create args object to hold all parameters
+# fix compatibility errors in agent.update() Done?
+# TODO --> Memory insufficient on laptop
+# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 # TODO BONUS: create custom enviroment with openAI gym
 
 trainingSet = p.read_csv(
@@ -76,8 +73,9 @@ for i_episode in range(num_episodes):
         num_passes += 1
         # Select and perform an action
         action = agent.act(state, state_additional)
-        actionNumber = round(action[0].item())  # conversion to int
-        actionTime = action[1]
+        action = action.view((2, 1))
+        actionNumber = round(action[0][0].item())  # conversion to int
+        actionTime = action[1][0]
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
         rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)

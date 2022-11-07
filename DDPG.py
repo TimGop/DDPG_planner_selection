@@ -30,6 +30,7 @@ class DDPG(object):
     def __init__(self, gamma, tau, h, w):
         self.gamma = gamma
         self.tau = tau
+
         # Define the actor
         self.actor = Actor(h, w, 17).to(device)
         self.actor_target = Actor(h, w, 17).to(device)
@@ -49,9 +50,9 @@ class DDPG(object):
 
     def get_action(self, select_action_State, select_action_State_additional):
         self.actor.eval()
-        planner_vector, best_planner_runtime = self.actor(select_action_State, select_action_State_additional)
+        action = self.actor(select_action_State, torch.unsqueeze(select_action_State_additional, dim=0))
         self.actor.train()
-        return planner_vector.max(1)[1].view(1, 1), best_planner_runtime
+        return action
 
     def act(self, select_action_State, select_action_State_additional):
         global steps_done
@@ -60,7 +61,7 @@ class DDPG(object):
         steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
-                return torch.cat(self.get_action(select_action_State, select_action_State_additional))
+                return self.get_action(select_action_State, select_action_State_additional)
         else:
             timeAlloc = torch.tensor(
                 [[random.random() * select_action_State_additional[-1]]])  # random allocation 0-rem. time
@@ -79,9 +80,6 @@ class DDPG(object):
 
         # Get the actions and the state values to compute the targets
         next_action_batch = self.actor_target(next_state_batch, next_state_additional_batch)
-        print("shape next_state_batch: " + str(next_state_batch.shape))
-        print("shape next_state_additional_batch: " + str(next_state_additional_batch.shape))
-        print("shape next_action_batch: " + str(next_action_batch.shape))
         next_state_action_values = self.critic_target(next_state_batch, next_state_additional_batch,
                                                       next_action_batch.detach())
 
@@ -92,10 +90,6 @@ class DDPG(object):
 
         # Update the critic network
         self.critic_optimizer.zero_grad()
-        # TODO fix memory issues to do with unnecessary tensor creation and allocation to memory
-        print("shape state_batch: "+str(state_batch.shape))
-        print("shape state_additional_batch: "+str(state_additional_batch.shape))
-        print("shape action_batch: "+str(action_batch.shape))
         state_action_batch = self.critic(state_batch, state_additional_batch, action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
         value_loss.backward()
