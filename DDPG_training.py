@@ -6,7 +6,6 @@ import random
 from DDPG_reward import reward
 from Replay_Memory_and_utils import ReplayMemory, Transition, resize, imageWidth, imageHeight
 from DDPG_evaluation import evaluateNetwork
-
 from torchvision.io import read_image
 from DDPG import DDPG
 
@@ -122,8 +121,8 @@ for i_episode in range(num_episodes):
         if done or actionTime == 0:
             break
     if i_episode % EVALUATE == 0:
-        print("testing network...")
         if len(memory) >= BATCH_SIZE:
+            print("testing network...")
             episodeList, averageRewardList = evaluateNetwork(episodeList, averageRewardList, i_episode, agent,
                                                              rand_a_baseline)
 

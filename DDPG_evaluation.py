@@ -12,9 +12,8 @@ taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-m
 
 
 def randAction(timeLeft, n_actions):
-    timeAlloc = random.random() * timeLeft
-    actionNo = torch.tensor([[random.randrange(n_actions)]])
-    return actionNo, torch.tensor([[timeAlloc]])
+    action = torch.tensor([[[random.randrange(n_actions)]], [[random.random() * timeLeft]]])
+    return action
 
 
 def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent, randAverageReward, rand_bool=False,
@@ -45,27 +44,28 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         prevActionIdx = None
         while 0 <= e_time_left_ep - minTimeReq_best_planner_testSet:
             if not rand_bool:
-                actionVector, Action_t = agent.get_action(state)
-                print(Action_t)
+                action = agent.get_action(state)
             else:
-                actionVector, Action_t = randAction(e_time_left_ep, n_actions)
-            action_idx = actionVector.max(1)[1].view(1, 1)
-            currReward = reward(e_current_task_index, action_idx.item(), Action_t, e_time_left_ep, testSet)[0]
+                action = randAction(e_time_left_ep, n_actions)
+            action = action.view((2, 1))
+            action_idx = round(action[0][0].item())  # conversion to int
+            action_t = action[1][0]
+            currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
             rewardTotal += currReward
             number_of_passes += 1
             # actionNo.item+1 because first column is name
-            if Action_t.item() == 0:
+            if action_t.item() == 0:
                 # to avoid infinite loops
                 break
-            elif testSet.iloc[e_current_task_index][action_idx.item() + 1] > Action_t:
+            elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t:
                 # action hasnt led to goal continue
                 if prevActionIdx is action_idx:
-                    e_currentlyExecuting[action_idx] += Action_t.item()
+                    e_currentlyExecuting[action_idx] += action_t.item()
                 else:
                     e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                                                         dtype=torch.float)
-                    e_currentlyExecuting[action_idx] += Action_t.item()
-                e_time_left_ep -= Action_t
+                    e_currentlyExecuting[action_idx] += action_t.item()
+                e_time_left_ep -= action_t
                 if e_currentlyExecuting[action_idx] > e_maxConsecExecuted[action_idx]:
                     e_maxConsecExecuted[action_idx] = e_currentlyExecuting[action_idx]
                 state = (
@@ -94,4 +94,5 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         plt.legend()
         plt.show()
     agent.set_train()
+    print("finish testing...")
     return episodeNumbers, averageRewards
