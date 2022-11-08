@@ -9,11 +9,13 @@ from DDPG_evaluation import evaluateNetwork
 from torchvision.io import read_image
 from DDPG import DDPG
 
-# TODO create args object to hold all parameters
+# TODO correct rand action output in DDPG and DDPG_eval
+# TODO find out why time output always zero in update (with batches)
 # fix compatibility errors in agent.update() Done?
-# TODO --> Memory insufficient on laptop
+# --> Memory insufficient on laptop
 # TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 # TODO BONUS: create custom enviroment with openAI gym
+# TODO create args object to hold all parameters
 
 trainingSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
@@ -22,7 +24,7 @@ taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-m
 gamma = 0.99  # discount factor for reward (default: 0.99)
 tau = 0.001  # discount factor for model (default: 0.001)
 
-BATCH_SIZE = 124
+BATCH_SIZE = 16
 GAMMA = 0.8
 EPS_START = 0.9
 EPS_END = 0.05
@@ -71,10 +73,8 @@ for i_episode in range(num_episodes):
     while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
         num_passes += 1
         # Select and perform an action
-        action = agent.act(state, state_additional)
-        action = action.view((2, 1))
-        actionNumber = round(action[0][0].item())  # conversion to int
-        actionTime = action[1][0]
+        actions, actionTime = agent.act(state, state_additional)
+        actionNumber = torch.argmax(actions).item()
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
         rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
@@ -103,7 +103,8 @@ for i_episode in range(num_episodes):
 
         # Store the transition in memory
         mask = torch.Tensor([done])
-        memory.push(state, state_additional, current_task_index, action, mask, next_state, next_state_additional,
+        memory.push(state, state_additional, current_task_index, actions, actionTime, mask, next_state,
+                    next_state_additional,
                     rewardVal)
 
         # Move to the next state

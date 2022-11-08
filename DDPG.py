@@ -1,6 +1,5 @@
 import math
 import random
-
 from DDPG_nets import Actor, Critic
 import torch
 import torch.nn.functional as F
@@ -63,25 +62,26 @@ class DDPG(object):
             with torch.no_grad():
                 return self.get_action(select_action_State, select_action_State_additional)
         else:
-            timeAlloc = torch.tensor(
-                [[random.random() * select_action_State_additional[-1]]])  # random allocation 0-rem. time
-            actionNo = torch.tensor([[random.randrange(n_actions)]], device=device)
-            return torch.cat((actionNo, timeAlloc))
+            return torch.tensor([[random.random() for _ in range(n_actions)]], device=device).softmax(dim=1),\
+                   torch.tensor([random.random() * select_action_State_additional[-1]],
+                                device=device)
 
     def update(self, transition_batch):
         self.set_train()
         state_batch = torch.cat(transition_batch.state).to(device)
         state_additional_batch = torch.stack(transition_batch.state_additional).to(device)
         action_batch = torch.stack(transition_batch.action).to(device)
+        time_batch = torch.stack(transition_batch.time).to(device)
         reward_batch = torch.cat(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
         next_state_batch = torch.cat(transition_batch.next_state).to(device)
         next_state_additional_batch = torch.stack(transition_batch.next_state_additional).to(device)
 
         # Get the actions and the state values to compute the targets
-        next_action_batch = self.actor_target(next_state_batch, next_state_additional_batch)
+        next_action_batch, next_time_batch = self.actor_target(next_state_batch, next_state_additional_batch)
+        print("next_time", next_time_batch)
         next_state_action_values = self.critic_target(next_state_batch, next_state_additional_batch,
-                                                      next_action_batch.detach())
+                                                      next_action_batch.detach(), next_time_batch.detach())
 
         # Compute the target
         reward_batch = reward_batch.unsqueeze(1)
@@ -90,7 +90,8 @@ class DDPG(object):
 
         # Update the critic network
         self.critic_optimizer.zero_grad()
-        state_action_batch = self.critic(state_batch, state_additional_batch, action_batch)
+        #print(action_batch.shape)
+        state_action_batch = self.critic(state_batch, state_additional_batch, action_batch, time_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
         value_loss.backward()
         self.critic_optimizer.step()
@@ -98,7 +99,10 @@ class DDPG(object):
         # Update the actor network
         self.actor_optimizer.zero_grad()
         # minus in front below because comes from a q-value
-        policy_loss = -self.critic(state_batch, state_additional_batch, self.actor(state_batch))
+        state_actions, state_time = self.actor(state_batch, state_additional_batch)
+        print("state_time", state_time)
+        #print(temp.shape)
+        policy_loss = -self.critic(state_batch, state_additional_batch, state_actions, state_time)
         policy_loss = policy_loss.mean()
         policy_loss.backward()
         self.actor_optimizer.step()

@@ -12,8 +12,10 @@ taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-m
 
 
 def randAction(timeLeft, n_actions):
-    action = torch.tensor([[[random.randrange(n_actions)]], [[random.random() * timeLeft]]])
-    return action
+    # action = torch.tensor([[random.randrange(n_actions), random.random() * timeLeft]])
+    # return action
+    return torch.tensor([[random.random() for _ in range(n_actions)]]).softmax(dim=1), \
+           torch.tensor([random.random() * timeLeft])
 
 
 def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent, randAverageReward, rand_bool=False,
@@ -39,44 +41,43 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         e_img = np.ascontiguousarray(e_img, dtype=np.float32) / 255
         e_img = torch.from_numpy(e_img)
         e_img = resize(e_img).unsqueeze(0)
-        state = (e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep]))
+        state = e_img
+        state_additional = torch.cat((e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep])))
         minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[e_current_task_index]
         prevActionIdx = None
         while 0 <= e_time_left_ep - minTimeReq_best_planner_testSet:
             if not rand_bool:
-                action = agent.get_action(state)
+                action = agent.get_action(state, state_additional)
             else:
                 action = randAction(e_time_left_ep, n_actions)
-            action = action.view((2, 1))
-            action_idx = round(action[0][0].item())  # conversion to int
-            action_t = action[1][0]
+            action_idx = torch.argmax(action[0]).item()  # conversion to int
+            action_t = action[1][0].item()
             currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
             rewardTotal += currReward
             number_of_passes += 1
             # actionNo.item+1 because first column is name
-            if action_t.item() == 0:
+            if action_t == 0:
                 # to avoid infinite loops
                 break
             elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t:
                 # action hasnt led to goal continue
                 if prevActionIdx is action_idx:
-                    e_currentlyExecuting[action_idx] += action_t.item()
+                    e_currentlyExecuting[action_idx] += action_t
                 else:
                     e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                                                         dtype=torch.float)
-                    e_currentlyExecuting[action_idx] += action_t.item()
+                    e_currentlyExecuting[action_idx] += action_t
                 e_time_left_ep -= action_t
                 if e_currentlyExecuting[action_idx] > e_maxConsecExecuted[action_idx]:
                     e_maxConsecExecuted[action_idx] = e_currentlyExecuting[action_idx]
-                state = (
-                    e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting,
-                    torch.tensor([e_time_left_ep]))
+                state = e_img
+                state_additional = torch.cat((e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep])))
             else:
                 number_correct += 1
                 # action leads to goal i.e. done
                 break
             prevActionIdx = action_idx
-    averageRewards.append((rewardTotal / number_of_passes).item())
+    averageRewards.append((rewardTotal / num_of_tests).item())
     if not rand_bool:
         print(episodeNumbers)
         print(averageRewards)
