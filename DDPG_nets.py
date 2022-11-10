@@ -11,6 +11,8 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
+        # self.batchNormalisation = nn.BatchNorm2d()
+        # TODO with kernel size 1 maxpool doesnt do anything???
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
@@ -26,11 +28,8 @@ class Actor(nn.Module):
         x.to(device)
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
         x_Final_Layer = torch.cat((x, f_state_additional), dim=1)
-        # return torch.cat((torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))).max(1)[1].view(
-        #     -1, 1),torch.relu(
-        #     self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1))
-        # )
-        # ), dim=1)
+        # return torch.cat((torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))).max(1)[
+        # 1].view( -1, 1),torch.relu( self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)) ) ), dim=1)
         action = torch.softmax(self.headPlanner(x_Final_Layer), dim=1)
         time = torch.relu(self.headTime(x_Final_Layer)).view(-1)
         return action, time
@@ -44,7 +43,7 @@ class Critic(nn.Module):
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
-        NumAdditionalArgsLinLayer = 35 + 18  # 2 additinal arguments denoting the action taken
+        NumAdditionalArgsLinLayer = 35 + 18  # 18 additinal arguments denoting the actions vals and time action
         # NumAdditionalArgsLinLayer: For each planner currently executing and max consecutively executing (2*17)
         #                            plus 1 more for time remaining in episode --> (2*17+1=35)
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
@@ -54,6 +53,6 @@ class Critic(nn.Module):
         x = f_state
         x.to(device)
         x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
-        x_additional = torch.cat((f_state_additional, torch.squeeze(action), time.view(-1,1)), dim=1)
+        x_additional = torch.cat((f_state_additional, torch.squeeze(action), time.view(-1, 1)), dim=1)
         x_Final_Layer = torch.cat((x, x_additional), dim=1)
         return self.headQ(x_Final_Layer)

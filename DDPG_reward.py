@@ -1,13 +1,15 @@
 import torch
 import numpy as np
 
-ominicron = 100
+ominicron = 1
 Theta = 1
 Epsilon = 0.2
 time_per_ep = 1800  # TODO have this passed
 
 
 def reward(taskIndex, actionNo, actionT, time_left_episode, df):
+    if actionT > time_left_episode:
+        return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
     if actionT <= 0:
         return torch.tensor([-ominicron], dtype=torch.float), False  # action time is zero
     # print("action number: " + str(actionNo))

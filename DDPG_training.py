@@ -9,13 +9,10 @@ from DDPG_evaluation import evaluateNetwork
 from torchvision.io import read_image
 from DDPG import DDPG
 
-# TODO correct rand action output in DDPG and DDPG_eval
-# TODO find out why time output always zero in update (with batches)
-# fix compatibility errors in agent.update() Done?
-# --> Memory insufficient on laptop
-# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
-# TODO BONUS: create custom enviroment with openAI gym
-# TODO create args object to hold all parameters
+# TODO find out why time output tends to zero in update or infinity
+# create args object to hold all parameters
+# in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
+# create custom enviroment with openAI gym
 
 trainingSet = p.read_csv(
     "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
@@ -75,9 +72,11 @@ for i_episode in range(num_episodes):
         # Select and perform an action
         actions, actionTime = agent.act(state, state_additional)
         actionNumber = torch.argmax(actions).item()
+        print("time", actionTime)
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
         rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
+        print("reward", rewardVal)
         if not done:
             time_left_ep -= actionTime
             if same_action:

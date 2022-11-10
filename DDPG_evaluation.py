@@ -52,7 +52,9 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
                 action = randAction(e_time_left_ep, n_actions)
             action_idx = torch.argmax(action[0]).item()  # conversion to int
             action_t = action[1][0].item()
+            print("action_t", action_t)
             currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
+            print("eval_reward: ", currReward)
             rewardTotal += currReward
             number_of_passes += 1
             # actionNo.item+1 because first column is name

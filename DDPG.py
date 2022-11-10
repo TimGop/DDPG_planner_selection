@@ -41,8 +41,8 @@ class DDPG(object):
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters())  # optimizer for the actor network
-        self.critic_optimizer = Adam(self.critic.parameters())  # optimizer for the critic network
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0001)  # optimizer for the actor network
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0001)  # optimizer for the critic network
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -62,7 +62,7 @@ class DDPG(object):
             with torch.no_grad():
                 return self.get_action(select_action_State, select_action_State_additional)
         else:
-            return torch.tensor([[random.random() for _ in range(n_actions)]], device=device).softmax(dim=1),\
+            return torch.tensor([[random.random() for _ in range(n_actions)]], device=device).softmax(dim=1), \
                    torch.tensor([random.random() * select_action_State_additional[-1]],
                                 device=device)
 
@@ -79,7 +79,6 @@ class DDPG(object):
 
         # Get the actions and the state values to compute the targets
         next_action_batch, next_time_batch = self.actor_target(next_state_batch, next_state_additional_batch)
-        print("next_time", next_time_batch)
         next_state_action_values = self.critic_target(next_state_batch, next_state_additional_batch,
                                                       next_action_batch.detach(), next_time_batch.detach())
 
@@ -90,21 +89,26 @@ class DDPG(object):
 
         # Update the critic network
         self.critic_optimizer.zero_grad()
-        #print(action_batch.shape)
         state_action_batch = self.critic(state_batch, state_additional_batch, action_batch, time_batch)
+        # print("Critic expected values: ", expected_values)
+        # print("Critic values: ", state_action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
+        # print("val_loss: ", value_loss)
         value_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
         # Update the actor network
         self.actor_optimizer.zero_grad()
         # minus in front below because comes from a q-value
         state_actions, state_time = self.actor(state_batch, state_additional_batch)
-        print("state_time", state_time)
-        #print(temp.shape)
+        # print("next_time_target: ", next_time_batch)
+        # print("state_time_policy: ", state_time)
         policy_loss = -self.critic(state_batch, state_additional_batch, state_actions, state_time)
         policy_loss = policy_loss.mean()
+        # print("policy loss from critic for actor: ", policy_loss)
         policy_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
         # Update the target networks
