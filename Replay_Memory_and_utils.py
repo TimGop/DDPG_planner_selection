@@ -8,7 +8,8 @@ imageHeight = 128  # must be 128 or smaller
 imageWidth = 128  # must be 128 or smaller
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'done', 'next_state', 'reward')
+                        ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done', 'next_state',
+                         'next_state_additional', 'reward')
                         )
 
 resize = T.Compose([T.ToPILImage(),

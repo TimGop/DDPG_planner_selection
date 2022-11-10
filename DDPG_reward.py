@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-ominicron = 1
-Theta = 1
+ominicron = 0.8
+Theta = 0.8
 Epsilon = 0.2
 time_per_ep = 1800  # TODO have this passed
 

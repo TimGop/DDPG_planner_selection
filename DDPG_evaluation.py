@@ -11,6 +11,8 @@ testSet = p.read_csv("C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-d
 taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
 
 
+# TODO fix average award allocation
+
 def randAction(timeLeft, n_actions):
     # action = torch.tensor([[random.randrange(n_actions), random.random() * timeLeft]])
     # return action
@@ -55,11 +57,11 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
             print("action_t", action_t)
             currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
             print("eval_reward: ", currReward)
-            rewardTotal += currReward
             number_of_passes += 1
             # actionNo.item+1 because first column is name
             if action_t == 0:
                 # to avoid infinite loops
+                rewardTotal += currReward
                 break
             elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t:
                 # action hasnt led to goal continue
@@ -70,12 +72,18 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
                                                         dtype=torch.float)
                     e_currentlyExecuting[action_idx] += action_t
                 e_time_left_ep -= action_t
+                if 0 > e_time_left_ep - minTimeReq_best_planner_testSet:
+                    # episode ends before next while loop anyways
+                    rewardTotal += currReward
+                    break
                 if e_currentlyExecuting[action_idx] > e_maxConsecExecuted[action_idx]:
                     e_maxConsecExecuted[action_idx] = e_currentlyExecuting[action_idx]
                 state = e_img
-                state_additional = torch.cat((e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep])))
+                state_additional = torch.cat(
+                    (e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep])))
             else:
                 number_correct += 1
+                rewardTotal += currReward
                 # action leads to goal i.e. done
                 break
             prevActionIdx = action_idx

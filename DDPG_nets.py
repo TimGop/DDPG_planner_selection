@@ -11,7 +11,7 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
-        # self.batchNormalisation = nn.BatchNorm2d()
+        self.batchNormalisation = nn.BatchNorm2d(128)
         # TODO with kernel size 1 maxpool doesnt do anything???
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
@@ -26,7 +26,7 @@ class Actor(nn.Module):
     def forward(self, f_state, f_state_additional):
         x = f_state
         x.to(device)
-        x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        x = self.dropOut(self.flatten(self.maxPool(self.batchNormalisation(self.conv2d(x)))))
         x_Final_Layer = torch.cat((x, f_state_additional), dim=1)
         # return torch.cat((torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))).max(1)[
         # 1].view( -1, 1),torch.relu( self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)) ) ), dim=1)
@@ -40,6 +40,7 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
+        self.batchNormalisation = nn.BatchNorm2d(128)
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
@@ -52,7 +53,7 @@ class Critic(nn.Module):
     def forward(self, f_state, f_state_additional, action, time):
         x = f_state
         x.to(device)
-        x = self.dropOut(self.flatten(self.maxPool(self.conv2d(x))))
+        x = self.dropOut(self.flatten(self.maxPool(self.batchNormalisation(self.conv2d(x)))))
         x_additional = torch.cat((f_state_additional, torch.squeeze(action), time.view(-1, 1)), dim=1)
         x_Final_Layer = torch.cat((x, x_additional), dim=1)
         return self.headQ(x_Final_Layer)
