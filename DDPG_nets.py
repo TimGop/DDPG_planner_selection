@@ -49,6 +49,7 @@ class Critic(nn.Module):
         #                            plus 1 more for time remaining in episode --> (2*17+1=35)
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
         self.headQ = nn.Linear(linear_input_size, outputs)  # numoutputs --> single value
+        self.l_ReLu = nn.LeakyReLU(negative_slope=1e-2)
 
     def forward(self, f_state, f_state_additional, action, time):
         x = f_state
@@ -56,4 +57,6 @@ class Critic(nn.Module):
         x = self.dropOut(self.flatten(self.maxPool(self.batchNormalisation(self.conv2d(x)))))
         x_additional = torch.cat((f_state_additional, torch.squeeze(action), time.view(-1, 1)), dim=1)
         x_Final_Layer = torch.cat((x, x_additional), dim=1)
+        # TODO does a linear output work with expected rewards bellman equation?
+        # below using relu somehow allows time to be reduced by grad. des.
         return self.headQ(x_Final_Layer)

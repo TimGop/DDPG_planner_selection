@@ -4,6 +4,8 @@ from DDPG_nets import Actor, Critic
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
+import torch.nn as nn
+# from Replay_Memory_and_utils import init_weights
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -32,17 +34,23 @@ class DDPG(object):
 
         # Define the actor
         self.actor = Actor(h, w, 17).to(device)
+        nn.init.kaiming_normal_(self.actor.headTime.weight.data, nonlinearity='relu')
+        nn.init.constant_(self.actor.headTime.bias.data, 0)
+        # self.actor.apply(init_weights)
+        # print("conv2d init weights: ", self.actor.conv2d.weight)
         self.actor_target = Actor(h, w, 17).to(device)
 
         # Define the critic
         self.critic = Critic(h, w).to(device)
+        # self.critic.apply(init_weights)
         self.critic_target = Critic(h, w).to(device)
 
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0001)  # optimizer for the actor network
-        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0001)  # optimizer for the critic network
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0001)  # optimizer for actor net
+        # weight_decay=1e-8???
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0001)  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -93,7 +101,10 @@ class DDPG(object):
         # print("Critic expected values: ", expected_values)
         # print("Critic values: ", state_action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
-        # print("val_loss: ", value_loss)
+        print("state_action_batch: ", state_action_batch)
+        print("expected_values: ", expected_values.detach())
+        print("val_loss vec: ", expected_values.detach()-state_action_batch)
+        print("val loss: ", value_loss)
         value_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()

@@ -72,11 +72,11 @@ for i_episode in range(num_episodes):
         # Select and perform an action
         actions, actionTime = agent.act(state, state_additional)
         actionNumber = torch.argmax(actions).item()
-        print("time", actionTime)
+        # print("time", actionTime)
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
         rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
-        print("reward", rewardVal)
+        # print("reward", rewardVal)
         if not done:
             time_left_ep -= actionTime
             if same_action:
