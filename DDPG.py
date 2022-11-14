@@ -34,8 +34,8 @@ class DDPG(object):
 
         # Define the actor
         self.actor = Actor(h, w, 17).to(device)
-        nn.init.kaiming_normal_(self.actor.headTime.weight.data, nonlinearity='relu')
-        nn.init.constant_(self.actor.headTime.bias.data, 0)
+        # nn.init.kaiming_normal_(self.actor.headTime.weight.data, nonlinearity='relu')
+        # nn.init.constant_(self.actor.headTime.bias.data, 0)
         # self.actor.apply(init_weights)
         # print("conv2d init weights: ", self.actor.conv2d.weight)
         self.actor_target = Actor(h, w, 17).to(device)
@@ -66,6 +66,7 @@ class DDPG(object):
         sample = random.random()
         eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
         steps_done += 1
+        # Patrick: Change this also to the noise model from the original paper
         if sample > eps_threshold:
             with torch.no_grad():
                 return self.get_action(select_action_State, select_action_State_additional)

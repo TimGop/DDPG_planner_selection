@@ -8,10 +8,11 @@ from PIL import Image
 imageHeight = 128  # must be 128 or smaller
 imageWidth = 128  # must be 128 or smaller
 
-Transition = namedtuple('Transition',
-                        ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done', 'next_state',
-                         'next_state_additional', 'reward')
-                        )
+Transition = namedtuple(
+    'Transition',
+    ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done',
+     'next_state', 'next_state_additional', 'reward')
+)
 
 resize = T.Compose([T.ToPILImage(),
                     T.Resize(imageWidth, interpolation=Image.CUBIC),
