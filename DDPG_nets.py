@@ -59,4 +59,4 @@ class Critic(nn.Module):
         x_Final_Layer = torch.cat((x, x_additional), dim=1)
         # TODO does a linear output work with expected rewards bellman equation?
         # below using relu somehow allows time to be reduced by grad. des.
-        return self.headQ(x_Final_Layer)
+        return self.l_ReLu(self.headQ(x_Final_Layer))
