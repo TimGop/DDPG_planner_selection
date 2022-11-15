@@ -3,7 +3,7 @@ import random
 
 
 def import_data():
-    df = pd.read_csv('C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/runtimes.csv')
+    df = pd.read_csv('IPC-image-data-master/runtimes.csv')
     return df  # create training test split not important how yet but lets get a decent first draft
     # return data
 
@@ -40,11 +40,11 @@ def batchSplit(df):
     df_train = pd.DataFrame(training)
     df_validation = pd.DataFrame(validation)
     df_test = pd.DataFrame(test)
-    df_train.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv',
+    df_train.to_csv(r'IPC-image-data-master/problem_splits/training.csv',
                     index=False)
-    df_validation.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits'
+    df_validation.to_csv(r'IPC-image-data-master/problem_splits'
                          r'/validation.csv', index=False)
-    df_test.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv',
+    df_test.to_csv(r'IPC-image-data-master/problem_splits/testing.csv',
                    index=False)
 
 
@@ -65,11 +65,11 @@ def randSplit(df):
     df_train = pd.DataFrame(training)
     df_validation = pd.DataFrame(validation)
     df_test = pd.DataFrame(test)
-    df_train.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv',
+    df_train.to_csv(r'IPC-image-data-master/problem_splits/training.csv',
                     index=False)
-    df_validation.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits'
+    df_validation.to_csv(r'IPC-image-data-master/problem_splits'
                          r'/validation.csv', index=False)
-    df_test.to_csv(r'C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv',
+    df_test.to_csv(r'IPC-image-data-master/problem_splits/testing.csv',
                    index=False)
 
 

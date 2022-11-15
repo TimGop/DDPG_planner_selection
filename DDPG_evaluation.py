@@ -7,8 +7,8 @@ from DDPG_reward import reward
 import matplotlib.pyplot as plt
 from Replay_Memory_and_utils import resize
 
-testSet = p.read_csv("C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
-taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
+taskFolderLoc = "IPC-image-data-master/grounded/"
 
 
 # TODO fix average award allocation

@@ -14,9 +14,8 @@ from DDPG import DDPG
 # in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 # create custom enviroment with openAI gym
 
-trainingSet = p.read_csv(
-    "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
-taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+trainingSet = p.read_csv("IPC-image-data-master/problem_splits/training.csv")
+taskFolderLoc = "IPC-image-data-master/grounded/"
 
 gamma = 0.99  # discount factor for reward (default: 0.99)
 tau = 0.001  # discount factor for model (default: 0.001)

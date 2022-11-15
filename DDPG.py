@@ -34,14 +34,16 @@ class DDPG(object):
 
         # Define the actor
         self.actor = Actor(h, w, 17).to(device)
-        nn.init.kaiming_normal_(self.actor.headTime.weight.data, nonlinearity='relu')
-        nn.init.constant_(self.actor.headTime.bias.data, 0)
+        nn.init.kaiming_normal_(self.actor.headTime.weight, nonlinearity='relu')
+        nn.init.constant_(self.actor.headTime.bias, 0)
         # self.actor.apply(init_weights)
         # print("conv2d init weights: ", self.actor.conv2d.weight)
         self.actor_target = Actor(h, w, 17).to(device)
 
         # Define the critic
         self.critic = Critic(h, w).to(device)
+        nn.init.xavier_normal_(self.critic.headQ.weight)
+        nn.init.constant_(self.critic.headQ.bias, 0)
         # self.critic.apply(init_weights)
         self.critic_target = Critic(h, w).to(device)
 
