@@ -6,3 +6,4 @@ whereas a graph with a GNN does not share this problem.
 
 
 # Now using a DDPG instead of a DQN
+To run DDPG run the file DDPG_training.py
