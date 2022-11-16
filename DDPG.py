@@ -1,10 +1,10 @@
 import math
+import numpy as np
 import random
 from DDPG_nets import Actor, Critic
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
-import torch.nn as nn
 # from Replay_Memory_and_utils import init_weights
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,25 +34,25 @@ class DDPG(object):
 
         # Define the actor
         self.actor = Actor(h, w, 17).to(device)
-        nn.init.kaiming_normal_(self.actor.headTime.weight, nonlinearity='relu')
-        nn.init.constant_(self.actor.headTime.bias, 0)
+        # nn.init.kaiming_normal_(self.actor.headTime.weight, nonlinearity='relu')
+        # nn.init.constant_(self.actor.headTime.bias, 0)
         # self.actor.apply(init_weights)
         # print("conv2d init weights: ", self.actor.conv2d.weight)
         self.actor_target = Actor(h, w, 17).to(device)
 
         # Define the critic
         self.critic = Critic(h, w).to(device)
-        nn.init.xavier_normal_(self.critic.headQ.weight)
-        nn.init.constant_(self.critic.headQ.bias, 0)
+        # nn.init.xavier_normal_(self.critic.headQ.weight)
+        # nn.init.constant_(self.critic.headQ.bias, 0)
         # self.critic.apply(init_weights)
         self.critic_target = Critic(h, w).to(device)
 
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0001)  # optimizer for actor net
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0005)  # optimizer for actor net
         # weight_decay=1e-8???
-        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0001)  # optimizer for critic net
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0005)  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -64,17 +64,12 @@ class DDPG(object):
         return action
 
     def act(self, select_action_State, select_action_State_additional):
-        global steps_done
-        sample = random.random()
-        eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
-        steps_done += 1
-        if sample > eps_threshold:
-            with torch.no_grad():
-                return self.get_action(select_action_State, select_action_State_additional)
-        else:
-            return torch.tensor([[random.random() for _ in range(n_actions)]], device=device).softmax(dim=1), \
-                   torch.tensor([random.random() * select_action_State_additional[-1]],
-                                device=device)
+        with torch.no_grad():
+            action = self.get_action(select_action_State, select_action_State_additional)
+            actions, actionTime = action
+            actionTime += torch.normal(torch.zeros((1,)), torch.full((1,), 200))
+            actions += torch.normal(torch.zeros((1, 17)), torch.full((1, 17), 0.3))
+            return action
 
     def update(self, transition_batch):
         self.set_train()
@@ -103,10 +98,10 @@ class DDPG(object):
         # print("Critic expected values: ", expected_values)
         # print("Critic values: ", state_action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
-        print("state_action_batch: ", state_action_batch)
-        print("expected_values: ", expected_values.detach())
-        print("val_loss vec: ", expected_values.detach()-state_action_batch)
-        print("val loss: ", value_loss)
+        # print("state_action_batch: ", state_action_batch)
+        # print("expected_values: ", expected_values.detach())
+        # print("val_loss vec: ", expected_values.detach()-state_action_batch)
+        # print("val loss: ", value_loss)
         value_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()

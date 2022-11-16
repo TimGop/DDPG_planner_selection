@@ -9,7 +9,6 @@ from DDPG_evaluation import evaluateNetwork
 from torchvision.io import read_image
 from DDPG import DDPG
 
-# TODO find out why time output tends to zero in update or infinity
 # create args object to hold all parameters
 # in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 # create custom enviroment with openAI gym
@@ -20,7 +19,7 @@ taskFolderLoc = "IPC-image-data-master/grounded/"
 gamma = 0.99  # discount factor for reward (default: 0.99)
 tau = 0.001  # discount factor for model (default: 0.001)
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 GAMMA = 0.8
 EPS_START = 0.9
 EPS_END = 0.05
@@ -48,8 +47,8 @@ averageRewardList = []
 for i_episode in range(num_episodes):
     print("episode " + str(i_episode))
     time_left_ep = time_per_ep
-    maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
-    currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
+    maxConsecExecuted = torch.tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])  # .detach()
+    currentlyExecuting = torch.tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])  # .detach()
     current_task_index = math.floor(random.random() * len(trainingSet))  # pick a random task in training set
     currentTaskName = trainingSet.iloc[current_task_index][0]
     currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
@@ -63,30 +62,35 @@ for i_episode in range(num_episodes):
     state_additional = torch.cat((maxConsecExecuted, currentlyExecuting,
                                   torch.tensor([time_left_ep])))
     last_actionNumber = None
-    same_action = False
     num_passes = 0
     minTimeReq_best_planner_trainSet = minTimeReq_best_planner_list_train[current_task_index]
     while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
         num_passes += 1
         # Select and perform an action
         actions, actionTime = agent.act(state, state_additional)
+        print("actionTime: ", actionTime)
         actionNumber = torch.argmax(actions).item()
+        print("action number: ", actionNumber)
         # print("time", actionTime)
         if last_actionNumber == actionNumber:  # to update consecutive times below
             same_action = True
-        rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
+        else:
+            same_action = False
+        rewardVal, done = reward(current_task_index, actionNumber, actionTime, currentlyExecuting[actionNumber],
+                                 time_left_ep, trainingSet)
+        print("done?", done)
+        print("reward:", rewardVal)
         # print("reward", rewardVal)
-        if not done:
+        if not done and actionTime > 0:
             time_left_ep -= actionTime
             if same_action:
-                currentlyExecuting[actionNumber] += actionTime
+                currentlyExecuting[actionNumber] += actionTime.item()
             else:
-                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
+                currentlyExecuting = torch.tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
                 currentlyExecuting[actionNumber] = currentlyExecuting[actionNumber] + actionTime
-            max_index = max(range(len(currentlyExecuting)), key=currentlyExecuting.__getitem__)
             maxConsecExecutedNext = maxConsecExecuted
-            if maxConsecExecutedNext[max_index].item() < currentlyExecuting[max_index].item():
-                maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
+            if maxConsecExecutedNext[actionNumber].item() < currentlyExecuting[actionNumber].item():
+                maxConsecExecutedNext[actionNumber] = currentlyExecuting[actionNumber]
             # create new state
             next_state = img
             # next_state_additional = (maxConsecExecutedNext, currentlyExecuting,
@@ -108,6 +112,7 @@ for i_episode in range(num_episodes):
         # Move to the next state
         state = next_state
         state_additional = next_state_additional
+        last_actionNumber = actionNumber
         # Perform one step of the optimization (on the policy network)
         if len(memory) >= BATCH_SIZE:
             transitions = memory.sample(BATCH_SIZE)
@@ -117,7 +122,7 @@ for i_episode in range(num_episodes):
             # Update actor and critic according to the batch
             value_loss, policy_loss = agent.update(batch)  # optimize network/s
 
-        if done or actionTime == 0:
+        if done or actionTime <= 0:
             break
     if i_episode % EVALUATE == 0:
         if len(memory) >= BATCH_SIZE:

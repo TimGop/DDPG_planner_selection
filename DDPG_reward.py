@@ -1,24 +1,32 @@
 import torch
-import numpy as np
 
-ominicron = 0.8
-Theta = 0.8
-Epsilon = 0.2
+ominicron = 10
+Theta = 10
+Epsilon = 1
 time_per_ep = 1800  # TODO have this passed
 
 
-def reward(taskIndex, actionNo, actionT, time_left_episode, df):
-    if actionT > time_left_episode:
-        return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
-    if actionT <= 0:
+def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutiveTime, time_left_episode, df):
+    # Patrick: plannerCurrPrevConsecutiveTime is the consecutive time, excluding plannerCurrTime,
+    # of the now selected planner
+    if plannerCurrTime <= 0:
         return torch.tensor([-ominicron], dtype=torch.float), False  # action time is zero
-    # print("action number: " + str(actionNo))
-    minTimeReq_currPlanner = df.iloc[taskIndex][actionNo + 1]
-    minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()
+    if plannerCurrTime > time_left_episode:  # Patrick: Limited predictionto episode
+        # Patrick: Let's keep it simple and not penalize this yet.
+        plannerCurrTime = time_left_episode
+        # return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
+    plannerCurrConsecutiveTime = plannerCurrPrevConsecutiveTime + plannerCurrTime
 
-    if minTimeReq_currPlanner > time_left_episode:
+    # print("action number: " + str(plannerCurrNo))
+    minTimeReq_currPlanner = df.iloc[taskIndex][plannerCurrNo + 1]
+    minTimeReq_anyPlanner = df.iloc[taskIndex][1:].min()
+    missingTime = minTimeReq_currPlanner - plannerCurrConsecutiveTime  # negative means solved!
+
+    # Patrick: Previous check ignored consecutive previous runtime!
+    # Choosen planner cannot solve within remaining time
+    if missingTime > time_left_episode:
         # bad planner
-        if (time_left_episode - actionT) > minTimeReq_anyPlanner:
+        if (time_left_episode - plannerCurrTime) > minTimeReq_anyPlanner:
             # time left for another planner --> ok bad
             return torch.tensor([-Epsilon], dtype=torch.float), False
         else:
@@ -26,14 +34,23 @@ def reward(taskIndex, actionNo, actionT, time_left_episode, df):
             return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
 
     else:
-        R_p = (np.min([actionT, minTimeReq_currPlanner]) / minTimeReq_currPlanner) * Epsilon
-        R_s = 0
-        # good planner
-        if actionT >= minTimeReq_currPlanner:
-            # solved --> very good
-            R_s = (1 - (actionT - minTimeReq_currPlanner) / (time_per_ep - minTimeReq_currPlanner)) * Theta
+        # Patrick: Let's keep it simple
+        # R_p = (np.min([plannerCurrTime, minTimeReq_currPlanner]) / minTimeReq_currPlanner) * Epsilon
+        if missingTime <= 0:
+            R_p = Epsilon
+            # Patrick: Positive reward also depends on previous bad choices!
+            passed_time = time_per_ep - time_left_episode
+            unnecessary_passed_time = passed_time - minTimeReq_anyPlanner
+            time_buffer = time_per_ep - minTimeReq_anyPlanner
+            R_s = (time_buffer - unnecessary_passed_time) / time_buffer * Theta
+            # Patrick: the reward should speak about the best possible planner R_s = (1 - (plannerCurrConsecutiveTime
+            # - minTimeReq_currPlanner) / (time_per_ep - minTimeReq_currPlanner)) * Theta
+            return torch.tensor([R_s + R_p], dtype=torch.float), True
+        else:
+            R_p = 0
+            R_s = 0
+            return torch.tensor([R_s + R_p], dtype=torch.float), False
         # else R_s stays equal to zero
-        return torch.tensor([R_s + R_p], dtype=torch.float), True
 
 
 class Reward:

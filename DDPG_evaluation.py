@@ -55,15 +55,16 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
             action_idx = torch.argmax(action[0]).item()  # conversion to int
             action_t = action[1][0].item()
             print("action_t", action_t)
-            currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
+            currReward = reward(e_current_task_index, action_idx, action_t, e_currentlyExecuting[action_idx],
+                                e_time_left_ep, testSet)[0]
             print("eval_reward: ", currReward)
             number_of_passes += 1
             # actionNo.item+1 because first column is name
-            if action_t == 0:
+            if action_t <= 0:
                 # to avoid infinite loops
                 rewardTotal += currReward
                 break
-            elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t:
+            elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t + e_currentlyExecuting[action_idx]:
                 # action hasnt led to goal continue
                 if prevActionIdx is action_idx:
                     e_currentlyExecuting[action_idx] += action_t
@@ -88,11 +89,11 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
                 break
             prevActionIdx = action_idx
     averageRewards.append((rewardTotal / num_of_tests).item())
+    print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
+    print("average number of passes per task=" + str(number_of_passes / num_of_tests))
     if not rand_bool:
         print(episodeNumbers)
         print(averageRewards)
-        print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
-        print("average number of passes per task=" + str(number_of_passes / num_of_tests))
         # plotting average reward development throughout test set
         if episodeNumbers.__len__() > 1:
             plt.plot(episodeNumbers, averageRewards, color='g', label="policy network")
