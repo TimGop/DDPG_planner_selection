@@ -7,12 +7,14 @@ time_per_ep = 1800  # TODO have this passed
 
 
 def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutiveTime, time_left_episode, df):
+    R_t = 0
     # Patrick: plannerCurrPrevConsecutiveTime is the consecutive time, excluding plannerCurrTime,
     # of the now selected planner
     if plannerCurrTime <= 0:
         return torch.tensor([-ominicron], dtype=torch.float), False  # action time is zero
     if plannerCurrTime > time_left_episode:  # Patrick: Limited predictionto episode
-        # Patrick: Let's keep it simple and not penalize this yet.
+        # Patrick: Let's keep it simple and not penalaize this yet.  --> penalized now
+        R_t = -5
         plannerCurrTime = time_left_episode
         # return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
     plannerCurrConsecutiveTime = plannerCurrPrevConsecutiveTime + plannerCurrTime
@@ -28,10 +30,10 @@ def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutive
         # bad planner
         if (time_left_episode - plannerCurrTime) > minTimeReq_anyPlanner:
             # time left for another planner --> ok bad
-            return torch.tensor([-Epsilon], dtype=torch.float), False
+            return torch.tensor([-Epsilon + R_t], dtype=torch.float), False
         else:
             # no time left for other planner --> very bad
-            return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
+            return torch.tensor([-Theta - Epsilon + R_t], dtype=torch.float), False
 
     else:
         # Patrick: Let's keep it simple
@@ -45,11 +47,11 @@ def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutive
             R_s = (time_buffer - unnecessary_passed_time) / time_buffer * Theta
             # Patrick: the reward should speak about the best possible planner R_s = (1 - (plannerCurrConsecutiveTime
             # - minTimeReq_currPlanner) / (time_per_ep - minTimeReq_currPlanner)) * Theta
-            return torch.tensor([R_s + R_p], dtype=torch.float), True
+            return torch.tensor([R_s + R_p + R_t], dtype=torch.float), True
         else:
             R_p = 0
             R_s = 0
-            return torch.tensor([R_s + R_p], dtype=torch.float), False
+            return torch.tensor([R_s + R_p + R_t], dtype=torch.float), False
         # else R_s stays equal to zero
 
 
