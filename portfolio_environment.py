@@ -16,11 +16,9 @@ class PortfolioEnvironment(gym.Env):
     def __init__(self, df, image_dir, max_time, func_reward, X, Y):
         super(PortfolioEnvironment, self).__init__()
         # General Information for this Environment
-        # TODO ceratin tasks unsolvable when restricting to first 17 planners
-        df = df.drop(df.columns[list(range(18, 30, 1))], axis=1)
         self.df = df
         self.image_dir = image_dir
-        self.nb_planners = 17  # len(df.columns)
+        self.nb_planners = len(df.columns)-1
         self.max_time = max_time
         self.func_reward = func_reward
 

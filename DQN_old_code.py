@@ -1,6 +1,4 @@
 import math
-import time
-
 import numpy as np
 import pandas as p
 import torch
@@ -45,11 +43,12 @@ class DQN(nn.Module):
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
 
     def forward(self, f_state):  # implementation with single input arg seems to be faster at the moment
-        # ASK!TODO test function also gets stuck on certain tasks why??? -->infinite loop -> time alloc.=0 almost always
-        # TODO sequential seperate encoding python file
-        # TODO actions with continuos output (not quite DQN) --> tuesday read papers
-        # TODO add constant after relu? --> probably a bad idea --> temp fix for testing functionality currently
-        # TODO improve efficiency of forward (look at reinforcement-q-learning.py in forward --> HOW!?!?!?!
+        # TODO save a list of plots to a file after every update(because we create a new plot after update) --> NV
+        # TODO actions with continuos output (not quite DQN) --> tuesday read papers-->DDPG --> NV
+        # TODO test function also gets stuck on certain tasks why??? -->infinite loop -> time alloc.=0 almost always -->NV
+        # TODO sequential seperate encoding python file --> NV
+        # add constant after relu? --> probably a bad idea --> temp fix for testing functionality currently
+        # improve efficiency of forward (look at reinforcement-q-learning.py in forward --> HOW!?!?!?!
         if type(f_state) is list:
             # f_state is a batch of states
             ret_list = []
