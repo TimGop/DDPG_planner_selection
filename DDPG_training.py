@@ -31,7 +31,6 @@ rand_a_baseline = average_Reward[0]
 
 time_per_ep = 1800
 num_episodes = 3000  # up to 4000 if possible later
-minTimeReq_best_planner_list_train = trainingSet.min(axis=1)
 
 episodeList = []
 averageRewardList = []
@@ -48,21 +47,17 @@ for i_episode in range(num_episodes):
                                   torch.tensor(env.consecutive_time_running, dtype=torch.float32),
                                   torch.tensor([env.time_left], dtype=torch.float32)))
     num_passes = 0
-    minTimeReq_best_planner_trainSet = minTimeReq_best_planner_list_train[env.task_idx]
     final_state = False
     time_restriction = False
     while not final_state and not time_restriction:
         num_passes += 1
         # Select and perform an action
         actions, actionTime = agent.act(state, state_additional)
-        print("actionTime: ", actionTime)
         actionNumber = torch.argmax(actions).item()
-        print("action number: ", actionNumber)
+        # print("actionTime: ", actionTime)
+        # print("action number: ", actionNumber)
         env_action = np.concatenate(((np.array(actions.detach())).reshape((17,)), np.array(actionTime.detach())))
         obs, rewardVal, final_state, time_restriction, _ = env.step(env_action)
-        print(final_state)
-        print(time_restriction)
-        print(rewardVal)
         next_state = state
         next_state_additional = torch.tensor(obs.get('task_additional'), dtype=torch.float32)
         # Store the transition in memory

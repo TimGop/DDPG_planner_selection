@@ -27,8 +27,6 @@ class Actor(nn.Module):
         x.to(device)
         x = self.dropOut(self.flatten(self.maxPool(self.batchNormalisation(self.conv2d(x)))))
         x_Final_Layer = torch.cat((x, f_state_additional), dim=1)
-        # return torch.cat((torch.sigmoid(self.headPlanner(x_Final_Layer.view(x_Final_Layer.size(0), -1))).max(1)[
-        # 1].view( -1, 1),torch.relu( self.headTime(x_Final_Layer.view(x_Final_Layer.size(0), -1)) ) ), dim=1)
         action = torch.softmax(self.headPlanner(x_Final_Layer), dim=1)
         time = self.headTime(x_Final_Layer).view(-1)
         return action, time
@@ -55,6 +53,4 @@ class Critic(nn.Module):
         x = self.dropOut(self.flatten(self.maxPool(self.batchNormalisation(self.conv2d(x)))))
         x_additional = torch.cat((f_state_additional, torch.squeeze(action), time.view(-1, 1)), dim=1)
         x_Final_Layer = torch.cat((x, x_additional), dim=1)
-        # TODO does a linear output work with expected rewards bellman equation?
-        # below using relu somehow allows time to be reduced by grad. des.
         return self.headQ(x_Final_Layer)

@@ -16,6 +16,8 @@ class PortfolioEnvironment(gym.Env):
     def __init__(self, df, image_dir, max_time, func_reward, X, Y):
         super(PortfolioEnvironment, self).__init__()
         # General Information for this Environment
+        # TODO ceratin tasks unsolvable when restricting to first 17 planners
+        df = df.drop(df.columns[list(range(18, 30, 1))], axis=1)
         self.df = df
         self.image_dir = image_dir
         self.nb_planners = 17  # len(df.columns)
@@ -48,6 +50,18 @@ class PortfolioEnvironment(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.task_idx = math.floor(random.random() * len(self.df))
+        self.best_planner_time = self.df.min(axis=1)[self.task_idx]
+        task_name = self.df.iloc[self.task_idx][0]
+        self.task_img = np.ascontiguousarray(read_image(os.path.join(
+            self.image_dir, task_name + '-bolded-cs.png')), dtype=np.float32) / 255
+        self.time_left = self.max_time
+        self.max_time_executed[:] = 0
+        self.consecutive_time_running[:] = 0
+        # returns current state as a tuple
+        return self.get_Observation(), {}
+
+    def reset_testMode(self, idx):
+        self.task_idx = idx
         self.best_planner_time = self.df.min(axis=1)[self.task_idx]
         task_name = self.df.iloc[self.task_idx][0]
         self.task_img = np.ascontiguousarray(read_image(os.path.join(

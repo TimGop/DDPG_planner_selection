@@ -2,11 +2,11 @@ import numpy as np
 
 import portfolio_environment
 import pandas as p
-from DDPG_reward import reward2
+from DDPG_reward import reward
 
 testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
 taskFolderLoc = "IPC-image-data-master/grounded/"
-env = portfolio_environment.PortfolioEnvironment(testSet, taskFolderLoc, 1800, reward2, 128, 128)
+env = portfolio_environment.PortfolioEnvironment(testSet, taskFolderLoc, 1800, reward, 128, 128)
 print(env.reset())
 print()
 print()
