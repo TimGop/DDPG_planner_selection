@@ -11,7 +11,7 @@ testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
 taskFolderLoc = "IPC-image-data-master/grounded/"
 
 
-# TODO fix average award allocation
+# TODO create a 2nd reset function that increments instead of rand sampling to use here
 
 def randAction(timeLeft, n_actions):
     # action = torch.tensor([[random.randrange(n_actions), random.random() * timeLeft]])

@@ -1,20 +1,9 @@
-import math
-import numpy as np
-import random
 from DDPG_nets import Actor, Critic
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
-# from Replay_Memory_and_utils import init_weights
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200  # try different values?
-
-n_actions = 17
-steps_done = 0
 
 
 def soft_update(target, source, tau):

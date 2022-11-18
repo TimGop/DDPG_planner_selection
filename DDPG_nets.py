@@ -12,7 +12,6 @@ class Actor(nn.Module):
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
         self.batchNormalisation = nn.BatchNorm2d(128)
-        # TODO with kernel size 1 maxpool doesnt do anything???
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
