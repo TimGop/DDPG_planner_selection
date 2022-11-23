@@ -8,14 +8,22 @@ time_per_ep = 1800  # TODO have this passed
 
 # used in openAI gym enviroment where np arrays are used
 def reward(taskIndex, plannerCurrNo, df):
-    is_best = False
-    best_to_worst_planner_indices = np.argsort(df.iloc[taskIndex][1:])
-    current_pos_in_list = np.where(best_to_worst_planner_indices == plannerCurrNo)[0]
-    if current_pos_in_list == 0:
-        is_best = True
-    rew = ((17 - current_pos_in_list) * 0.1) - 0.9
+    # We can calculate the reward however we like, but I do not care about selecting
+    # the best in the end, but for the final evaluation about solving!
+    runtimes = df.iloc[taskIndex][:17]
+    best_time = runtimes.min()
+    curr_time = runtimes[plannerCurrNo]
+    if best_time > 1800:
+        return 0, True
+    assert best_time < 1800, best_time
 
-    return rew, is_best
+    unnecessary_time = curr_time - best_time
+    buffer_time = 1800 - best_time
+
+    if curr_time >= 1800:
+        return - Theta - Epsilon, False
+    else:
+        return Epsilon + (1 - (unnecessary_time / buffer_time)) * Theta, True
 
 
 class Reward:

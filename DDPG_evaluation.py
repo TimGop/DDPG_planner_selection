@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from Replay_Memory_and_utils import resize
 
 testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
-taskFolderLoc = "IPC-image-data-master/grounded/"
+taskFolderLoc = "IPC-image-data-master/lifted/"
 env = portfolio_environment.PortfolioEnvironment(testSet, taskFolderLoc, reward)
 
 
@@ -31,9 +31,9 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         obs, _ = env.reset_testMode(task_i_idx)
         task_img = torch.from_numpy(obs)
         state = resize(task_img).unsqueeze(0)
-        final_state = False
+        episode_end = False
         i = 0
-        while not final_state:
+        while not episode_end:
             i += 1
             if not rand_bool:
                 action = agent.get_action(state)
@@ -41,19 +41,17 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
                 action = randAction(n_actions)
             print(torch.argmax(action).item())
             action = np.array(action.detach().squeeze(0))
-            obs, rewardVal, final_state, _, _ = env.step(action)
+            obs, rewardVal, final_state, episode_end, _ = env.step(action)
             rewardTotal += rewardVal
             number_of_passes += 1
             if final_state:
                 number_correct += 1
-            elif i == 4:
-                break
 
     averageRewards.append((rewardTotal / number_of_passes))
     print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
     if not rand_bool:
-        print(episodeNumbers)
-        print(averageRewards)
+        print("Episode", episodeNumbers)
+        print("Avg Reward", averageRewards)
         if episodeNumbers.__len__() > 1:
             plt.plot(episodeNumbers, averageRewards, color='g', label="policy network")
         else:
@@ -63,7 +61,8 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         plt.ylabel('average reward')
         plt.title('average rewards while testing DQN:')
         plt.legend()
-        plt.show()
+        # plt.show()
+        plt.savefig("rewards.pdf")
     agent.set_train()
     print("finish testing...")
     return episodeNumbers, averageRewards

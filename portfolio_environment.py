@@ -16,20 +16,22 @@ class PortfolioEnvironment(gym.Env):
         super(PortfolioEnvironment, self).__init__()
 
         # General Information for this Environment
-        self.df = df
+        self.filenames = df["filename"]
+        self.df = df.drop("filename", axis="columns")
         self.image_dir = image_dir
         self.nb_planners = len(df.columns) - 1
         self.func_reward = func_reward
 
+        self.best_planner_times = (self.df.min(axis=1))
         # Current State of this Environment
-        self.best_planner_time = (df.min(axis=1))[0]
+        self.best_planner_time = None
         self.task_idx = -1
         self.task_img = None
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.task_idx = math.floor(random.random() * len(self.df))
-        self.best_planner_time = self.df.min(axis=1)[self.task_idx]
-        task_name = self.df.iloc[self.task_idx][0]
+        self.best_planner_time = self.best_planner_times[self.task_idx]
+        task_name = self.filenames.iloc[self.task_idx]
         self.task_img = np.ascontiguousarray(read_image(os.path.join(
             self.image_dir, task_name + '-bolded-cs.png')), dtype=np.float32) / 255
         return self.task_img, {}
@@ -37,20 +39,18 @@ class PortfolioEnvironment(gym.Env):
     def reset_testMode(self, idx):
         self.task_idx = idx
         self.best_planner_time = self.df.min(axis=1)[self.task_idx]
-        task_name = self.df.iloc[self.task_idx][0]
+        task_name = self.filenames.iloc[self.task_idx]
         self.task_img = np.ascontiguousarray(read_image(os.path.join(
             self.image_dir, task_name + '-bolded-cs.png')), dtype=np.float32) / 255
         return self.task_img, {}
 
     def step(self, action):
         assert self.task_img is not None, "Call reset before using step method..."
-        final_state = False
         action_number = np.argmax(action[:17])
         rewardVal, done = self.func_reward(self.task_idx, action_number, self.df)
         if done:
-            final_state = True
             self.task_img = None
-        return self.task_img, rewardVal, final_state, False, {}
+        return self.task_img, rewardVal, done, True, {}
 
     @staticmethod
     def get_planner_noise():

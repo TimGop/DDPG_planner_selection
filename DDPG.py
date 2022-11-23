@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 def soft_update(target, source, tau):
@@ -66,10 +67,10 @@ class DDPG(object):
         state_batch = torch.cat(transition_batch.state).to(device)
         action_batch = torch.stack(transition_batch.action).to(device)
         action_batch = action_batch.squeeze(dim=1)
-        reward_batch = torch.cat(transition_batch.reward).to(device)
+        reward_batch = torch.stack(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
         next_state_batch = torch.cat(transition_batch.next_state).to(device)
-
+        # assert False, action_batch
         # Get the actions and the state values to compute the targets
         next_action_batch = self.actor_target(next_state_batch)
         next_state_action_values = self.critic_target(next_state_batch, next_action_batch.detach())
@@ -96,14 +97,12 @@ class DDPG(object):
         # Update the actor network
         self.actor_optimizer.zero_grad()
         # minus in front below because comes from a q-value
-        state_actions = self.actor(state_batch)
         # print("next_time_target: ", next_time_batch)
         # print("state_time_policy: ", state_time)
-        policy_loss = -self.critic(state_batch, state_actions)
-        policy_loss = policy_loss.mean()
+        policy_loss = -self.critic(state_batch, self.actor(state_batch)).mean()
         # print("policy loss from critic for actor: ", policy_loss)
         policy_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
         # Update the target networks
