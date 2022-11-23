@@ -61,7 +61,7 @@ for i_episode in range(num_episodes):
         # Store the transition in memory
         memory.push(state, env.task_idx, actions, mask, state, rewardVal)
 
-
+        # Why did you break here in your code without an update step?
 
         # Perform one step of the optimization (on the policy network)
         if len(memory) >= BATCH_SIZE:

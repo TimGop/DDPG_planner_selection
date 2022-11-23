@@ -13,7 +13,7 @@ def reward(taskIndex, plannerCurrNo, df):
     runtimes = df.iloc[taskIndex][:17]
     best_time = runtimes.min()
     curr_time = runtimes[plannerCurrNo]
-    if best_time > 1800:
+    if best_time > 1800:  # actually, this should not happen, but currently it does
         return 0, True
     assert best_time < 1800, best_time
 

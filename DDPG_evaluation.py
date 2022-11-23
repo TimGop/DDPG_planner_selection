@@ -61,8 +61,7 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         plt.ylabel('average reward')
         plt.title('average rewards while testing DQN:')
         plt.legend()
-        # plt.show()
-        plt.savefig("rewards.pdf")
+        plt.show()
     agent.set_train()
     print("finish testing...")
     return episodeNumbers, averageRewards

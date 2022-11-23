@@ -15,13 +15,14 @@ class Actor(nn.Module):
         self.dropout = nn.Dropout2d(p=0.5)
         self.flatten = nn.Flatten()
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer)
-        self.headPlanner = nn.Linear(linear_input_size, outputs)  # numoutputs should equal 17 (17 values)
+        self.hidden = nn.Linear(linear_input_size, 20)  # numoutputs should equal 17 (17 values)
+        self.headPlanner = nn.Linear(20, outputs)  # numoutputs should equal 17 (17 values)
 
     def forward(self, f_state):
         x = f_state
         x.to(device)
         x = torch.softmax(
-            self.headPlanner(self.flatten(self.dropout(self.batchNormalisation(torch.relu(self.conv2d(x)))))), dim=1)
+            self.headPlanner(torch.relu(self.hidden(self.flatten(self.dropout(self.batchNormalisation(torch.relu(self.conv2d(x)))))))), dim=1)
         return x
 
 
@@ -37,11 +38,12 @@ class Critic(nn.Module):
         # NumAdditionalArgsLinLayer: For each planner currently executing and max consecutively executing (2*17)
         #                            plus 1 more for time remaining in episode --> (2*17+1=35)
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
-        self.headQ = nn.Linear(linear_input_size, outputs)  # numoutputs --> single value
+        self.hidden = nn.Linear(linear_input_size, 20)  # numoutputs --> single value
+        self.headQ = nn.Linear(20, outputs)  # numoutputs --> single value
 
     def forward(self, f_state, action):
         x = f_state
         x.to(device)
         x = self.flatten(self.dropout(self.batchNormalisation(torch.relu(self.conv2d(x)))))
         x_Final_Layer = torch.cat((x, action), dim=1)
-        return self.headQ(x_Final_Layer)
+        return self.headQ(torch.relu(self.hidden(x_Final_Layer)))
