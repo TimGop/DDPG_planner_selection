@@ -50,7 +50,7 @@ class PortfolioEnvironment(gym.Env):
         if done:
             final_state = True
             self.task_img = None
-        return self.task_img, rewardVal, final_state, False, {}
+        return self.task_img, rewardVal, final_state, True, {}
 
     @staticmethod
     def get_planner_noise():

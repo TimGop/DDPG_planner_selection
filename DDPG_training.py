@@ -44,27 +44,25 @@ for i_episode in range(num_episodes):
     state = img.unsqueeze(0)
     final_state = False
     # limit to 5 attempts per episode
-    for i in range(5):
-        print("i", i)
+    for i in range(1):
         # Select and perform an action
         actions = agent.act(state)
         actionNumber = torch.argmax(actions).item()
-        print(actionNumber)
-        # print("actionTime: ", actionTime)
-        # print("action number: ", actionNumber)
+        print("action", actionNumber)
+        # final state always True
         env_action = (np.array(actions.detach())).reshape((17,))
-        next_state, rewardVal, final_state, _, _ = env.step(env_action)
-
-        if i == 4:
-            final_state = True
-
-        mask = torch.Tensor([final_state])
+        next_state, rewardVal, final_state, end, _ = env.step(env_action)
+        print("nextstate", next_state)
+        print("reward", rewardVal)
+        print("final_state", final_state)
+        print("end", end)
+        mask = torch.Tensor([final_state or end])
         rewardVal = torch.tensor(rewardVal, dtype=torch.float32)
 
         # Store the transition in memory
         memory.push(state, env.task_idx, actions, mask, state, rewardVal)
 
-        if final_state:
+        if end:
             break
 
         # Perform one step of the optimization (on the policy network)

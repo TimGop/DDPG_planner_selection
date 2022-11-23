@@ -41,12 +41,13 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
                 action = randAction(n_actions)
             print(torch.argmax(action).item())
             action = np.array(action.detach().squeeze(0))
-            obs, rewardVal, final_state, _, _ = env.step(action)
+            obs, rewardVal, final_state, end, _ = env.step(action)
             rewardTotal += rewardVal
             number_of_passes += 1
+
             if final_state:
                 number_correct += 1
-            elif i == 4:
+            elif end:
                 break
 
     averageRewards.append((rewardTotal / number_of_passes))
