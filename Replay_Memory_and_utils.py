@@ -1,21 +1,20 @@
 from collections import deque, namedtuple
 import torchvision.transforms as T
 import random
-import torch.nn as nn
-
 from PIL import Image
 
-imageHeight = 128  # must be 128 or smaller
-imageWidth = 128  # must be 128 or smaller
 
 Transition = namedtuple('Transition',
                         ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done', 'next_state',
                          'next_state_additional', 'reward')
                         )
 
-resize = T.Compose([T.ToPILImage(),
-                    T.Resize(imageWidth, interpolation=Image.CUBIC),
-                    T.ToTensor()])
+
+class resizer:
+    def __init__(self, width_and_height_size):
+        self.resize = T.Compose([T.ToPILImage(),
+                                 T.Resize(width_and_height_size, interpolation=Image.CUBIC),
+                                 T.ToTensor()])
 
 
 # TODO doesnt remove t=0 !?!

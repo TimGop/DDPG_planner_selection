@@ -1,38 +1,44 @@
-# https://towardsdatascience.com/creating-a-custom-openai-gym-environment-for-stock-trading-be532be3910e
-
 import math
 import os
 import random
+
+import torch
 from torchvision.io import read_image
 from typing import Optional
 import gym
-from gym import spaces
 import numpy as np
 
 
 class PortfolioEnvironment(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, image_dir, max_time, func_reward, X, Y):
+    def __init__(self, df, image_dir, max_time, func_reward, t_SD, p_SD, nb_planners, omnicron, Theta, Epsilon,
+                 time_per_ep):
         super(PortfolioEnvironment, self).__init__()
         # General Information for this Environment
         self.df = df
         self.image_dir = image_dir
-        self.nb_planners = len(df.columns)-1
+        self.nb_planners = nb_planners
         self.max_time = max_time
         self.func_reward = func_reward
+        self.time_standard_dev = t_SD
+        self.planner_standard_dev = p_SD
+        self.omnicron = omnicron
+        self.Theta = Theta
+        self.Epsilon = Epsilon
+        self.time_per_ep = time_per_ep
 
         # Action and Observation Space
         # One "action" per planner + time
-        self.action_space = spaces.Box(
-            low=np.array([0.] * self.nb_planners + [0.]),
-            high=np.array([1.] * self.nb_planners + [float(self.max_time)])
-        )  # Example for using image as input:
-        self.observation_space = spaces.Dict({
-            "task_img": spaces.Box(low=0, high=1, shape=(X, Y)),
-            "task_additional": spaces.Box(low=np.array([0] * 2 * self.nb_planners + [0]),
-                                          high=np.array(np.array([1800] * 2 * self.nb_planners + [0])))
-        })
+        # self.action_space = spaces.Box(
+        #     low=np.array([0.] * self.nb_planners + [0.]),
+        #     high=np.array([1.] * self.nb_planners + [float(self.max_time)])
+        # )  # Example for using image as input:
+        # self.observation_space = spaces.Dict({
+        #     "task_img": spaces.Box(low=0, high=1, shape=(X, Y)),
+        #     "task_additional": spaces.Box(low=np.array([0] * 2 * self.nb_planners + [0]),
+        #                                   high=np.array(np.array([1800] * 2 * self.nb_planners + [0])))
+        # })
         # Patrick: Observation description for AN image. Not for our images and not
         # for the other inputs
         # self.observation_space =
@@ -83,13 +89,15 @@ class PortfolioEnvironment(gym.Env):
         assert self.task_img is not None, "Call reset before using step method..."
         final_state = False
         time_limit = False
-        action_number = np.argmax(action[:17])
+        # action contains planner values and one time output at the end
+        action_number = np.argmax(action[:self.nb_planners])
         if self.last_action_number == action_number:  # to update consecutive times below
             same_action = True
         else:
             same_action = False
         rewardVal, done = self.func_reward(self.task_idx, action_number, action[-1],
-                                           self.consecutive_time_running[action_number], self.time_left, self.df)
+                                           self.consecutive_time_running[action_number], self.time_left, self.df,
+                                           self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
         self.time_left -= action[-1]
         leq_zero_action = (action[-1] <= 0)
         time_up = ((self.time_left - self.best_planner_time) <= 0)
@@ -109,6 +117,13 @@ class PortfolioEnvironment(gym.Env):
                 time_limit = True
                 self.task_img = None
         return self.get_Observation(), rewardVal, final_state, time_limit, {}
+
+    def get_time_noise(self):
+        return torch.normal(torch.zeros((1,)), torch.full((1,), self.time_standard_dev))
+
+    def get_planner_noise(self):
+        return torch.normal(torch.zeros((1, self.nb_planners)),
+                            torch.full((1, self.nb_planners), self.planner_standard_dev))
 
     def render(self, mode='human', close=False):
         print(f"Tas: {self.task_idx}")

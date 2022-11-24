@@ -6,20 +6,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Actor(nn.Module):
-    # outputs should equal 17
-    def __init__(self, h, w, outputs):
+    def __init__(self, h, w, num_planners=17):
         super(Actor, self).__init__()
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
-        self.batchNormalisation = nn.BatchNorm2d(128)
+        self.batchNormalisation = nn.BatchNorm2d(numOutputChannelsConvLayer)
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
-        NumAdditionalArgsLinLayer = 35
+        NumAdditionalArgsLinLayer = num_planners * 2 + 1
         # NumAdditionalArgsLinLayer: For each planner currently executing and max consecutively executing (2*17)
         #                            plus 1 more for time remaining in episode --> (2*17+1=35)
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
-        self.headPlanner = nn.Linear(linear_input_size, outputs)  # numoutputs should equal 17 (17 values)
+        self.headPlanner = nn.Linear(linear_input_size, num_planners)  # numoutputs should equal 17 (17 values)
         self.headTime = nn.Linear(linear_input_size, 1)
 
     def forward(self, f_state, f_state_additional):
@@ -33,7 +32,7 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, h, w, outputs=1):
+    def __init__(self, h, w, outputs=1, num_planners=17):
         super(Critic, self).__init__()
         numOutputChannelsConvLayer = 128
         self.conv2d = nn.Conv2d(1, numOutputChannelsConvLayer, kernel_size=(2, 2), stride=(1, 1))
@@ -41,9 +40,7 @@ class Critic(nn.Module):
         self.maxPool = nn.MaxPool2d(kernel_size=1)
         self.flatten = nn.Flatten()
         self.dropOut = nn.Dropout(p=0.49)
-        NumAdditionalArgsLinLayer = 35 + 18  # 18 additinal arguments denoting the actions vals and time action
-        # NumAdditionalArgsLinLayer: For each planner currently executing and max consecutively executing (2*17)
-        #                            plus 1 more for time remaining in episode --> (2*17+1=35)
+        NumAdditionalArgsLinLayer = num_planners * 2 + (num_planners + 2)  # time left and action time
         linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
         self.headQ = nn.Linear(linear_input_size, outputs)  # numoutputs --> single value
 

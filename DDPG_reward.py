@@ -1,13 +1,9 @@
 import numpy as np
 
-ominicron = 10
-Theta = 10
-Epsilon = 1
-time_per_ep = 1800  # TODO have this passed
-
 
 # used in openAI gym enviroment where np arrays are used
-def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutiveTime, time_left_episode, df):
+def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutiveTime, time_left_episode, df,
+           ominicron=10, Theta=10, Epsilon=1, time_per_ep=1800):
     R_t = 0
     # Patrick: plannerCurrPrevConsecutiveTime is the consecutive time, excluding plannerCurrTime,
     # of the now selected planner

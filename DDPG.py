@@ -17,31 +17,31 @@ def hard_update(target, source):
 
 
 class DDPG(object):
-    def __init__(self, gamma, tau, h, w):
+    def __init__(self, gamma, tau, h, w, env, num_planners):
         self.gamma = gamma
         self.tau = tau
+        self.env = env
 
         # Define the actor
-        self.actor = Actor(h, w, 17).to(device)
+        self.actor = Actor(h, w, num_planners=num_planners).to(device)
         # nn.init.kaiming_normal_(self.actor.headTime.weight, nonlinearity='relu')
         # nn.init.constant_(self.actor.headTime.bias, 0)
         # self.actor.apply(init_weights)
         # print("conv2d init weights: ", self.actor.conv2d.weight)
-        self.actor_target = Actor(h, w, 17).to(device)
+        self.actor_target = Actor(h, w, num_planners=num_planners).to(device)
 
         # Define the critic
-        self.critic = Critic(h, w).to(device)
+        self.critic = Critic(h, w, num_planners=num_planners).to(device)
         # nn.init.xavier_normal_(self.critic.headQ.weight)
         # nn.init.constant_(self.critic.headQ.bias, 0)
         # self.critic.apply(init_weights)
-        self.critic_target = Critic(h, w).to(device)
+        self.critic_target = Critic(h, w, num_planners=num_planners).to(device)
 
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0005)  # optimizer for actor net
-        # weight_decay=1e-8???
-        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0005)  # optimizer for critic net
+        self.actor_optimizer = Adam(self.actor.parameters())  # optimizer for actor net
+        self.critic_optimizer = Adam(self.critic.parameters())  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -56,8 +56,8 @@ class DDPG(object):
         with torch.no_grad():
             action = self.get_action(select_action_State, select_action_State_additional)
             actions, actionTime = action
-            actionTime += torch.normal(torch.zeros((1,)), torch.full((1,), 200))
-            actions += torch.normal(torch.zeros((1, 17)), torch.full((1, 17), 0.3))
+            actionTime += self.env.get_time_noise()
+            actions += self.env.get_planner_noise()
             return action
 
     def update(self, transition_batch):
