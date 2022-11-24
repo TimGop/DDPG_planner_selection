@@ -3,7 +3,8 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 def soft_update(target, source, tau):
@@ -17,33 +18,25 @@ def hard_update(target, source):
 
 
 class DDPG(object):
-    def __init__(self, gamma, tau, h, w, env):
+    def __init__(self, gamma, tau, h, w, num_planners, env):
         self.gamma = gamma
         self.tau = tau
 
         self.env = env
 
         # Define the actor
-        self.actor = Actor(h, w, 17).to(device)
-        # nn.init.kaiming_normal_(self.actor.headTime.weight, nonlinearity='relu')
-        # nn.init.constant_(self.actor.headTime.bias, 0)
-        # self.actor.apply(init_weights)
-        # print("conv2d init weights: ", self.actor.conv2d.weight)
-        self.actor_target = Actor(h, w, 17).to(device)
+        self.actor = Actor(h, w, num_planners).to(device)
+        self.actor_target = Actor(h, w, num_planners).to(device)
 
         # Define the critic
-        self.critic = Critic(h, w).to(device)
-        # nn.init.xavier_normal_(self.critic.headQ.weight)
-        # nn.init.constant_(self.critic.headQ.bias, 0)
-        # self.critic.apply(init_weights)
-        self.critic_target = Critic(h, w).to(device)
+        self.critic = Critic(h, w, NumAdditionalArgsLinLayer=num_planners).to(device)
+        self.critic_target = Critic(h, w, NumAdditionalArgsLinLayer=num_planners).to(device)
 
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.0005)  # optimizer for actor net
-        # weight_decay=1e-8???
-        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.0005)  # optimizer for critic net
+        self.actor_optimizer = Adam(self.actor.parameters())  # optimizer for actor net
+        self.critic_optimizer = Adam(self.critic.parameters())  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -66,7 +59,7 @@ class DDPG(object):
         state_batch = torch.cat(transition_batch.state).to(device)
         action_batch = torch.stack(transition_batch.action).to(device)
         action_batch = action_batch.squeeze(dim=1)
-        reward_batch = torch.cat(transition_batch.reward).to(device)
+        reward_batch = torch.stack(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
         next_state_batch = torch.cat(transition_batch.next_state).to(device)
 
@@ -96,14 +89,12 @@ class DDPG(object):
         # Update the actor network
         self.actor_optimizer.zero_grad()
         # minus in front below because comes from a q-value
-        state_actions = self.actor(state_batch)
         # print("next_time_target: ", next_time_batch)
         # print("state_time_policy: ", state_time)
-        policy_loss = -self.critic(state_batch, state_actions)
-        policy_loss = policy_loss.mean()
+        policy_loss = -self.critic(state_batch, self.actor(state_batch)).mean()
         # print("policy loss from critic for actor: ", policy_loss)
         policy_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
         # Update the target networks
@@ -112,14 +103,14 @@ class DDPG(object):
 
         return value_loss.item(), policy_loss.item()
 
-    def set_eval(self):  # sets networks to evaluation mode (faster)
+    def set_eval(self):
         # Sets the model in evaluation mode
         self.actor.eval()
         self.critic.eval()
         self.actor_target.eval()
         self.critic_target.eval()
 
-    def set_train(self):  # sets networks to training mode (needed for learning but slower)
+    def set_train(self):
         # Sets the model in training mode
         self.actor.train()
         self.critic.train()
