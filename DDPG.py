@@ -35,8 +35,8 @@ class DDPG(object):
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.01)  # optimizer for actor net
-        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.01)  # optimizer for critic net
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.002)  # optimizer for actor net
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.002)  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights

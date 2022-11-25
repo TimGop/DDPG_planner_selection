@@ -16,7 +16,7 @@ trainingSet = p.read_csv("IPC-image-data-master/problem_splits/training.csv")
 taskFolderLoc = "IPC-image-data-master/lifted/"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--BATCH_SIZE", default=32, type=int,
+parser.add_argument("--BATCH_SIZE", default=64, type=int,
                     help="Size of the batch used in training to update the networks(default: 32)")
 parser.add_argument("--num_episodes", default=3000, type=int,
                     help="Num. of total timesteps of training (default: 3000)")
@@ -24,7 +24,7 @@ parser.add_argument("--gamma", default=0.99,
                     help="Discount factor (default: 0.99)")
 parser.add_argument("--tau", default=0.05,
                     help="Update factor for the soft update of the target networks (default: 0.001)")
-parser.add_argument("--EVALUATE", default=10, type=int,
+parser.add_argument("--EVALUATE", default=50, type=int,
                     help="Number of episodes between testing cycles(default: 10)")
 parser.add_argument("--time_per_ep", default=1800, type=int,
                     help="The amount of time per episode(default: 1800)")

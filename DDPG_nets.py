@@ -25,7 +25,7 @@ class Actor(nn.Module):
         x = x.view((-1, 1))
         x = (torch.softmax(
             self.headPlanner(torch.relu(
-                self.hidden((torch.relu(self.in_layer(x)))))), dim=1))
+                self.hidden((torch.sigmoid(self.in_layer(x)))))), dim=1))
         return x
 
 
@@ -45,7 +45,7 @@ class Critic(nn.Module):
     def forward(self, f_state, action):
         x = f_state
         x.to(device)
-        x = x.view((32, 1))
+        x = x.view((64, 1))
         # x = self.flatten(self.dropout(self.batchNormalisation(torch.relu(self.conv2d(x)))))
         x_Final_Layer = torch.cat((x, action), dim=1)
-        return self.headQ(torch.relu(self.hidden(torch.relu(self.in_layer(x_Final_Layer)))))
+        return self.headQ(torch.relu(self.hidden(torch.sigmoid(self.in_layer(x_Final_Layer)))))
