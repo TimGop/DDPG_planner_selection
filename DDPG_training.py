@@ -22,7 +22,7 @@ parser.add_argument("--num_episodes", default=3000, type=int,
                     help="Num. of total timesteps of training (default: 3000)")
 parser.add_argument("--gamma", default=0.99,
                     help="Discount factor (default: 0.99)")
-parser.add_argument("--tau", default=0.001,
+parser.add_argument("--tau", default=0.05,
                     help="Update factor for the soft update of the target networks (default: 0.001)")
 parser.add_argument("--EVALUATE", default=10, type=int,
                     help="Number of episodes between testing cycles(default: 10)")
@@ -37,7 +37,7 @@ parser.add_argument("--Theta", default=10, type=int,
 parser.add_argument("--Epsilon", default=1, type=int,
                     help="A constant used for reward calculation(default: 1)")
 args = parser.parse_args()
-#  time_per_ep=1800, ominicron=10, Theta=10, Epsilon=1
+
 # Initialize memory, environment and agent
 memory = ReplayMemory(10000)
 env = portfolio_environment.PortfolioEnvironment(trainingSet, taskFolderLoc, reward, time_per_ep=args.time_per_ep,
@@ -56,9 +56,9 @@ for i_episode in range(args.num_episodes):
     print("\nepisode " + str(i_episode))
     # obs is a dict
     obs, _ = env.reset()
-    task_img = torch.from_numpy(obs)
-    img = resize(task_img)
-    state = img.unsqueeze(0)
+    # task_img = torch.from_numpy(obs)
+    # img = resize(task_img)
+    state = torch.tensor([obs], dtype=torch.float32)  # img.unsqueeze(0)
     final_state = False
     # limit to 1 attempt per episode
     for i in range(1):

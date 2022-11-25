@@ -29,8 +29,9 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
 
     for task_i_idx in range(num_of_tests):
         obs, _ = env.reset_testMode(task_i_idx)
-        task_img = torch.from_numpy(obs)
-        state = resize(task_img).unsqueeze(0)
+        # task_img = torch.from_numpy(obs)
+        state = obs  # resize(task_img).unsqueeze(0)
+        state = torch.tensor([state], dtype=torch.float32)
         episode_end = False
         i = 0
         while not episode_end:

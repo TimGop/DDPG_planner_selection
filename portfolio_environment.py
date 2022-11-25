@@ -36,6 +36,8 @@ class PortfolioEnvironment(gym.Env):
         task_name = self.filenames.iloc[self.task_idx]
         self.task_img = np.ascontiguousarray(read_image(os.path.join(
             self.image_dir, task_name + '-bolded-cs.png')), dtype=np.float32) / 255
+        # return self.task_img, {}
+        self.task_img = 1
         return self.task_img, {}
 
     def reset_testMode(self, idx):
@@ -44,6 +46,8 @@ class PortfolioEnvironment(gym.Env):
         task_name = self.filenames.iloc[self.task_idx]
         self.task_img = np.ascontiguousarray(read_image(os.path.join(
             self.image_dir, task_name + '-bolded-cs.png')), dtype=np.float32) / 255
+        # return self.task_img, {}
+        self.task_img = 1
         return self.task_img, {}
 
     def step(self, action):
@@ -53,11 +57,11 @@ class PortfolioEnvironment(gym.Env):
                                            ominicron=self.omnicron, Theta=self.Theta, Epsilon=self.Epsilon)
         if done:
             self.task_img = None
-        return self.task_img, rewardVal, done, True, {}
+        return 1, rewardVal, done, True, {}
 
     @staticmethod
     def get_planner_noise():
-        return torch.normal(torch.zeros((1, 17)), torch.full((1, 17), 0.7))
+        return torch.normal(torch.zeros((1, 17)), torch.full((1, 17), 1.0))
 
     def render(self, mode='human', close=False):
         print(f"Tas: {self.task_idx}")

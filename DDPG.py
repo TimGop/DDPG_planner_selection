@@ -35,8 +35,8 @@ class DDPG(object):
         self.critic_target.eval()  # removes dropout etc. for evaluation purposes
         self.actor_target.eval()  # removes dropout etc. for evaluation purposes
 
-        self.actor_optimizer = Adam(self.actor.parameters())  # optimizer for actor net
-        self.critic_optimizer = Adam(self.critic.parameters())  # optimizer for critic net
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=0.01)  # optimizer for actor net
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=0.01)  # optimizer for critic net
 
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
@@ -58,6 +58,9 @@ class DDPG(object):
         self.set_train()
         state_batch = torch.cat(transition_batch.state).to(device)
         action_batch = torch.stack(transition_batch.action).to(device)
+        # print(state_batch.shape)
+        # print(action_batch.shape)
+        # assert False
         action_batch = action_batch.squeeze(dim=1)
         reward_batch = torch.stack(transition_batch.reward).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
@@ -78,6 +81,7 @@ class DDPG(object):
         # print("Critic expected values: ", expected_values)
         # print("Critic values: ", state_action_batch)
         value_loss = F.mse_loss(state_action_batch, expected_values.detach())
+        print("val_loss:", value_loss)
         # print("state_action_batch: ", state_action_batch)
         # print("expected_values: ", expected_values.detach())
         # print("val_loss vec: ", expected_values.detach()-state_action_batch)
