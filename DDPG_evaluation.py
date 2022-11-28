@@ -2,87 +2,60 @@ import torch
 import random
 import numpy as np
 import pandas as p
-from torchvision.io import read_image
+
+import portfolio_environment
 from DDPG_reward import reward
 import matplotlib.pyplot as plt
 from Replay_Memory_and_utils import resize
 
-testSet = p.read_csv("C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/testing.csv")
-taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
+taskFolderLoc = "IPC-image-data-master/lifted/"
+env = portfolio_environment.PortfolioEnvironment(testSet, taskFolderLoc, reward)
 
 
-def randAction(timeLeft, n_actions):
-    action = torch.tensor([[[random.randrange(n_actions)]], [[random.random() * timeLeft]]])
-    return action
+def randAction(n_actions):
+    return torch.tensor([[random.random() for _ in range(n_actions)]], dtype=torch.float32).softmax(dim=1)
 
 
 def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent, randAverageReward, rand_bool=False,
-                    time_per_ep=1800, n_actions=17):
+                    n_actions=17):
     print("start testing...")
     agent.set_eval()
-    minTimeReq_best_planner_list_test = testSet.min(axis=1)
     num_of_tests = len(testSet)
     rewardTotal = 0
     number_of_passes = 0
     number_correct = 0
     episodeNumbers.append(currentEpisodeNumber)
+    is_first = True
 
     for task_i_idx in range(num_of_tests):
-        # print(task_i_idx)
-        e_time_left_ep = time_per_ep  # 1800
-        e_maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-        e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-        e_current_task_index = task_i_idx
-        e_currentTaskName = testSet.iloc[e_current_task_index][0]
-        e_currentTaskLoc = taskFolderLoc + e_currentTaskName + '-bolded-cs.png'
-        e_img = read_image(e_currentTaskLoc)
-        e_img = np.ascontiguousarray(e_img, dtype=np.float32) / 255
-        e_img = torch.from_numpy(e_img)
-        e_img = resize(e_img).unsqueeze(0)
-        state = (e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting, torch.tensor([e_time_left_ep]))
-        minTimeReq_best_planner_testSet = minTimeReq_best_planner_list_test[e_current_task_index]
-        prevActionIdx = None
-        while 0 <= e_time_left_ep - minTimeReq_best_planner_testSet:
+        obs, _ = env.reset_testMode(task_i_idx)
+        # task_img = torch.from_numpy(obs)
+        state = obs  # resize(task_img).unsqueeze(0)
+        state = torch.tensor([state], dtype=torch.float32)
+        episode_end = False
+        i = 0
+        while not episode_end:
+            i += 1
             if not rand_bool:
                 action = agent.get_action(state)
             else:
-                action = randAction(e_time_left_ep, n_actions)
-            action = action.view((2, 1))
-            action_idx = round(action[0][0].item())  # conversion to int
-            action_t = action[1][0]
-            currReward = reward(e_current_task_index, action_idx, action_t, e_time_left_ep, testSet)[0]
-            rewardTotal += currReward
+                action = randAction(n_actions)
+            if is_first:
+                print(torch.argmax(action).item())
+                is_first = False
+            action = np.array(action.detach().squeeze(0))
+            obs, rewardVal, final_state, episode_end, _ = env.step(action)
+            rewardTotal += rewardVal
             number_of_passes += 1
-            # actionNo.item+1 because first column is name
-            if action_t.item() == 0:
-                # to avoid infinite loops
-                break
-            elif testSet.iloc[e_current_task_index][action_idx + 1] > action_t:
-                # action hasnt led to goal continue
-                if prevActionIdx is action_idx:
-                    e_currentlyExecuting[action_idx] += action_t.item()
-                else:
-                    e_currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                        dtype=torch.float)
-                    e_currentlyExecuting[action_idx] += action_t.item()
-                e_time_left_ep -= action_t
-                if e_currentlyExecuting[action_idx] > e_maxConsecExecuted[action_idx]:
-                    e_maxConsecExecuted[action_idx] = e_currentlyExecuting[action_idx]
-                state = (
-                    e_img, e_current_task_index, e_maxConsecExecuted, e_currentlyExecuting,
-                    torch.tensor([e_time_left_ep]))
-            else:
+            if final_state:
                 number_correct += 1
-                # action leads to goal i.e. done
-                break
-            prevActionIdx = action_idx
-    averageRewards.append((rewardTotal / number_of_passes).item())
+
+    averageRewards.append((rewardTotal / number_of_passes))
+    print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
     if not rand_bool:
-        print(episodeNumbers)
-        print(averageRewards)
-        print("percentage correct=" + str((number_correct / num_of_tests) * 100) + "%")
-        print("average number of passes per task=" + str(number_of_passes / num_of_tests))
-        # plotting average reward development throughout test set
+        print("Episode", episodeNumbers)
+        print("Avg Reward", averageRewards)
         if episodeNumbers.__len__() > 1:
             plt.plot(episodeNumbers, averageRewards, color='g', label="policy network")
         else:
@@ -90,7 +63,7 @@ def evaluateNetwork(episodeNumbers, averageRewards, currentEpisodeNumber, agent,
         plt.axhline(y=randAverageReward, label="random action baseline")
         plt.xlabel('number of episodes')
         plt.ylabel('average reward')
-        plt.title('average rewards while testing DQN:')
+        plt.title('average rewards while testing DDPG:')
         plt.legend()
         plt.show()
     agent.set_train()

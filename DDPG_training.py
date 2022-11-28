@@ -1,127 +1,94 @@
-import math
+import argparse
 import torch
 import numpy as np
 import pandas as p
-import random
+
+import portfolio_environment
 from DDPG_reward import reward
 from Replay_Memory_and_utils import ReplayMemory, Transition, resize, imageWidth, imageHeight
 from DDPG_evaluation import evaluateNetwork
-from torchvision.io import read_image
 from DDPG import DDPG
 
-# TODO create args object to hold all parameters
-# fix compatibility errors in agent.update() Done?
-# TODO --> Memory insufficient on laptop
-# TODO in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
-# TODO BONUS: create custom enviroment with openAI gym
+# create args object to hold all parameters
+# in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
 
-trainingSet = p.read_csv(
-    "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/problem_splits/training.csv")
-taskFolderLoc = "C:/Users/TIM/PycharmProjects/pythonTestPyTorch/IPC-image-data-master/grounded/"
+trainingSet = p.read_csv("IPC-image-data-master/problem_splits/training.csv")
+taskFolderLoc = "IPC-image-data-master/lifted/"
 
-gamma = 0.99  # discount factor for reward (default: 0.99)
-tau = 0.001  # discount factor for model (default: 0.001)
+parser = argparse.ArgumentParser()
+parser.add_argument("--BATCH_SIZE", default=32, type=int,
+                    help="Size of the batch used in training to update the networks(default: 32)")
+parser.add_argument("--num_episodes", default=2000, type=int,
+                    help="Num. of total timesteps of training (default: 3000)")
+parser.add_argument("--gamma", default=0.99,
+                    help="Discount factor (default: 0.99)")
+parser.add_argument("--tau", default=0.001,
+                    help="Update factor for the soft update of the target networks (default: 0.001)")
+parser.add_argument("--EVALUATE", default=10, type=int,
+                    help="Number of episodes between testing cycles(default: 10)")
+parser.add_argument("--time_per_ep", default=1800, type=int,
+                    help="The amount of time per episode(default: 1800)")
+parser.add_argument("--num_planners", default=17, type=int,
+                    help="The number of different planner algorithms(default: 17)")
+parser.add_argument("--omnicron", default=10, type=int,
+                    help="A constant used for reward calculation(default: 10)")
+parser.add_argument("--Theta", default=10, type=int,
+                    help="A constant used for reward calculation(default: 10)")
+parser.add_argument("--Epsilon", default=1, type=int,
+                    help="A constant used for reward calculation(default: 1)")
+args = parser.parse_args()
 
-BATCH_SIZE = 124
-GAMMA = 0.8
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200  # try different values?
-EVALUATE = 10
-
+# Initialize memory, environment and agent
 memory = ReplayMemory(10000)
-
-agent = DDPG(gamma=gamma, tau=tau, h=imageHeight, w=imageWidth)
+env = portfolio_environment.PortfolioEnvironment(trainingSet, taskFolderLoc, reward, time_per_ep=args.time_per_ep,
+                                                 omnicron=args.omnicron, Theta=args.Theta, Epsilon=args.Epsilon)
+agent = DDPG(gamma=args.gamma, tau=args.tau, h=imageHeight, w=imageWidth, num_planners=args.num_planners, env=env)
 
 # calculate random action baseline prior to TRAINING
-_, average_Reward = evaluateNetwork([], [], 0, agent, 0, rand_bool=True)
+_, average_Reward = evaluateNetwork([], [], 0, agent, None, rand_bool=True, n_actions=args.num_planners)
 rand_a_baseline = average_Reward[0]
-
-# TRAINING
-
-time_per_ep = 1800
-num_episodes = 3000  # up to 4000 if possible later
-
-minTimeReq_best_planner_list_train = trainingSet.min(axis=1)
 
 episodeList = []
 averageRewardList = []
 
-for i_episode in range(num_episodes):
-    print("episode " + str(i_episode))
-    time_left_ep = time_per_ep
-    maxConsecExecuted = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
-    currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
-    current_task_index = math.floor(random.random() * len(trainingSet))  # pick a random task in training set
-    currentTaskName = trainingSet.iloc[current_task_index][0]
-    currentTaskLoc = taskFolderLoc + currentTaskName + '-bolded-cs.png'
-    img = read_image(currentTaskLoc)
-    # convert image to Tensor below for CNN
-    img = np.ascontiguousarray(img, dtype=np.float32) / 255
-    img = torch.from_numpy(img)
-
-    img = resize(img).unsqueeze(0)
-    state = img
-    state_additional = torch.cat((maxConsecExecuted, currentlyExecuting,
-                                  torch.tensor([time_left_ep])))
-    last_actionNumber = None
-    same_action = False
-    num_passes = 0
-    minTimeReq_best_planner_trainSet = minTimeReq_best_planner_list_train[current_task_index]
-    while 0 <= time_left_ep - minTimeReq_best_planner_trainSet:
-        num_passes += 1
+# TRAINING
+for i_episode in range(args.num_episodes):
+    print("\nepisode " + str(i_episode))
+    # obs is a dict
+    obs, _ = env.reset()
+    task_img = torch.from_numpy(obs)
+    img = resize(task_img)
+    state = img.unsqueeze(0)
+    final_state = False
+    # limit to 1 attempt per episode
+    for i in range(1):
         # Select and perform an action
-        action = agent.act(state, state_additional)
-        action = action.view((2, 1))
-        actionNumber = round(action[0][0].item())  # conversion to int
-        actionTime = action[1][0]
-        if last_actionNumber == actionNumber:  # to update consecutive times below
-            same_action = True
-        rewardVal, done = reward(current_task_index, actionNumber, actionTime, time_left_ep, trainingSet)
-        if not done:
-            time_left_ep -= actionTime
-            if same_action:
-                currentlyExecuting[actionNumber] += actionTime
-            else:
-                currentlyExecuting = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # .detach()
-                currentlyExecuting[actionNumber] = currentlyExecuting[actionNumber] + actionTime
-            max_index = max(range(len(currentlyExecuting)), key=currentlyExecuting.__getitem__)
-            maxConsecExecutedNext = maxConsecExecuted
-            if maxConsecExecutedNext[max_index].item() < currentlyExecuting[max_index].item():
-                maxConsecExecutedNext[max_index] = currentlyExecuting[max_index]
-            # create new state
-            next_state = img
-            # next_state_additional = (maxConsecExecutedNext, currentlyExecuting,
-            #                          torch.tensor([time_left_ep]))
-            next_state_additional = torch.cat((maxConsecExecutedNext, currentlyExecuting,
-                                               torch.tensor([time_left_ep])))
-            maxConsecExecuted = maxConsecExecutedNext
-        else:
-            # next state is final
-            next_state = img
-            next_state_additional = torch.zeros((35,))
+        actions = agent.act(state)
+        actionNumber = torch.argmax(actions).item()
+        # print(actionNumber, end=",")
+        # print("actionTime: ", actionTime)
+        # print("action number: ", actionNumber)
+        env_action = (np.array(actions.detach())).reshape((17,))
+        next_state, rewardVal, final_state, episode_end, _ = env.step(env_action)
+
+        mask = torch.Tensor([episode_end])
+        rewardVal = torch.tensor(rewardVal, dtype=torch.float32)
 
         # Store the transition in memory
-        mask = torch.Tensor([done])
-        memory.push(state, state_additional, current_task_index, action, mask, next_state, next_state_additional,
-                    rewardVal)
+        memory.push(state, env.task_idx, actions, mask, state, rewardVal)
 
-        # Move to the next state
-        state = next_state
-        state_additional = next_state_additional
         # Perform one step of the optimization (on the policy network)
-        if len(memory) >= BATCH_SIZE:
-            transitions = memory.sample(BATCH_SIZE)
+        if len(memory) >= args.BATCH_SIZE:
+            transitions = memory.sample(args.BATCH_SIZE)
             # Transpose the batch
             # (see http://stackoverflow.com/a/19343/3343043 for detailed explanation).
             batch = Transition(*zip(*transitions))
             # Update actor and critic according to the batch
             value_loss, policy_loss = agent.update(batch)  # optimize network/s
-
-        if done or actionTime == 0:
+        if episode_end:
             break
-    if i_episode % EVALUATE == 0:
-        if len(memory) >= BATCH_SIZE:
+    if i_episode % args.EVALUATE == 0:
+        if len(memory) >= args.BATCH_SIZE:
             print("testing network...")
             episodeList, averageRewardList = evaluateNetwork(episodeList, averageRewardList, i_episode, agent,
                                                              rand_a_baseline)

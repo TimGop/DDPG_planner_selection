@@ -1,14 +1,13 @@
 from collections import deque, namedtuple
 import torchvision.transforms as T
 import random
-
 from PIL import Image
 
 imageHeight = 128  # must be 128 or smaller
 imageWidth = 128  # must be 128 or smaller
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'done', 'next_state', 'reward')
+                        ('state', 'current_task_idx', 'action', 'done', 'next_state', 'reward')
                         )
 
 resize = T.Compose([T.ToPILImage(),
