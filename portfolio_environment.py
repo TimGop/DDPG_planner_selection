@@ -99,16 +99,21 @@ class PortfolioEnvironment(gym.Env):
                                            self.consecutive_time_running[action_number], self.time_left, self.df,
                                            self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
         self.time_left -= action[-1]
-        leq_zero_action = (action[-1] <= 0)
-        time_up = ((self.time_left - self.best_planner_time) <= 0)
         if same_action:
             self.consecutive_time_running[action_number] += action[-1]
         else:
             self.consecutive_time_running = np.zeros((self.nb_planners,))
             self.consecutive_time_running[action_number] = self.consecutive_time_running[action_number] + action[-1]
+
         if self.max_time_executed[action_number] < self.consecutive_time_running[action_number]:
             self.max_time_executed[action_number] = self.consecutive_time_running[action_number]
         self.last_action_number = action_number
+
+        leq_zero_action = (action[-1] <= 0)
+        # (not going to fix problem)
+        current_planner_time = self.df.iloc[self.task_idx][action_number + 1]  # +1 because first col ist task title
+        time_up = ((self.time_left - self.best_planner_time) <= 0) and \
+                  ((self.time_left + self.consecutive_time_running[action_number]) - current_planner_time <= 0)
         if done or time_up or leq_zero_action:
             if done:
                 final_state = True
