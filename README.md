@@ -1,9 +1,3 @@
-# DQN_planner_selection
-train a DQN to select the best planner for a given planning task
-Tasks are encoded as images in a grounded or lifted representation (128x128x1 PNG i.e. 128x128 greyscale PNG)
-potential possibility of using a GNN(with graphs) in the future instead of a CNN(with images) because images lose information (add accidental complexity while removing some essential complexity) 
-whereas a graph with a GNN does not share this problem.
-
-
 # Now using a DDPG instead of a DQN
 To run DDPG run the file DDPG_training.py
+Offline planning portfolios can decide on a planner and time allocation given a task. However this is done with no updated knowledge about the state such as planners previously attempted. Here we explore an online learning of planning portfolios making use of recent advances in deep RL that extend DQN to continuos action spaces (i.e. DDPG or deep deterministic policy gradients).
