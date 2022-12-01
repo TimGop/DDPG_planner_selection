@@ -58,6 +58,8 @@ class DDPG(object):
             actions, actionTime = action
             actionTime += self.env.get_time_noise()
             actions += self.env.get_planner_noise()
+            actions = actions.softmax(dim=1)  # so that these can be used as probabilities in reward
+            action = actions, actionTime
             return action
 
     def update(self, transition_batch):

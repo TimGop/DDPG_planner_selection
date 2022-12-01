@@ -10,19 +10,19 @@ from Replay_Memory_and_utils import resizer
 
 
 class evaluation:
-    def __init__(self, time_per_ep, t_SD, p_SD, w_and_h, nb_planners, omnicron, Theta, Epsilon):
+    def __init__(self, time_per_ep, t_SD, p_SD, w_and_h, nb_planners, omnicron, Theta, Epsilon, step_penalty):
         self.testSet = p.read_csv("IPC-image-data-master/problem_splits/testing.csv")
         self.taskFolderLoc = "IPC-image-data-master/grounded/"
         self.env = portfolio_environment.PortfolioEnvironment(self.testSet, self.taskFolderLoc, time_per_ep, reward,
                                                               t_SD=t_SD, p_SD=p_SD, nb_planners=nb_planners,
                                                               omnicron=omnicron, Theta=Theta, Epsilon=Epsilon,
-                                                              time_per_ep=time_per_ep)
+                                                              time_per_ep=time_per_ep, step_penalty=step_penalty)
         self.resizer = resizer(w_and_h)
 
     @staticmethod
     def randAction(timeLeft, n_actions):
         return torch.tensor([[random.random() for _ in range(n_actions)]], dtype=torch.float32).softmax(dim=1), \
-               torch.tensor([random.random() * timeLeft], dtype=torch.float32)
+               torch.tensor([[random.random() * timeLeft for _ in range(n_actions)]], dtype=torch.float32)
 
     def evaluateNetwork(self, episodeNumbers, averageRewards, currentEpisodeNumber, agent, randAverageReward,
                         rand_bool=False,
@@ -49,7 +49,9 @@ class evaluation:
                     action, action_t = agent.get_action(state, state_additional)
                 else:
                     action, action_t = self.randAction(self.env.time_left, n_actions)
-                complete_action = np.concatenate((np.array(action.detach().squeeze(0)), np.array(action_t.detach())))
+                complete_action = np.concatenate(
+                    (np.array(action.detach().squeeze(0)), np.array(action_t.detach()).squeeze(0)))
+
                 obs, rewardVal, final_state, time_restriction, _ = self.env.step(complete_action)
                 number_of_passes += 1
                 if final_state:
@@ -71,7 +73,7 @@ class evaluation:
             plt.axhline(y=randAverageReward, label="random action baseline")
             plt.xlabel('number of episodes')
             plt.ylabel('average reward')
-            plt.title('average rewards while testing DQN:')
+            plt.title('average rewards while testing DDPG:')
             plt.legend()
             plt.show()
         agent.set_train()

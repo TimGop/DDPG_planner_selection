@@ -8,10 +8,6 @@ from Replay_Memory_and_utils import ReplayMemory, Transition, resizer
 from DDPG_evaluation import evaluation
 from DDPG import DDPG
 
-# create args object to hold all parameters
-# in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
-# TODO limit steps per ep
-
 trainingSet = p.read_csv("IPC-image-data-master/problem_splits/training.csv")
 taskFolderLoc = "IPC-image-data-master/grounded/"
 
@@ -42,26 +38,29 @@ parser.add_argument("--height", default=128, type=int,
                     help="Image height used(default: 128)")
 parser.add_argument("--mem_size", default=10000, type=int,
                     help="Size of the Replay Memory(default: 10000)")
-parser.add_argument("--p_SD", default=0.7, type=float, help="Planner noise Standard deviation(default: 0.7)")
-parser.add_argument("--t_SD", default=200, type=float, help="Time noise Standard deviation(default: 200)")
+parser.add_argument("--p_SD", default=0.7, type=float,
+                    help="Planner noise Standard deviation(default: 0.7)")
+parser.add_argument("--t_SD", default=200, type=float,
+                    help="Time noise Standard deviation(default: 200)")
+parser.add_argument("--step_penalty", default=0.1, type=float,
+                    help="A constant used for reward calculation(default: 0.1)")
 args = parser.parse_args()
 
 memory = ReplayMemory(args.mem_size)
 env = portfolio_environment.PortfolioEnvironment(trainingSet, taskFolderLoc, args.time_per_ep, reward, t_SD=args.t_SD,
                                                  p_SD=args.p_SD, nb_planners=args.num_planners, omnicron=args.omnicron,
-                                                 Theta=args.Theta, Epsilon=args.Epsilon, time_per_ep=args.time_per_ep)
+                                                 Theta=args.Theta, Epsilon=args.Epsilon, time_per_ep=args.time_per_ep,
+                                                 step_penalty=args.step_penalty)
 agent = DDPG(gamma=args.gamma, tau=args.tau, h=args.height, w=args.width, env=env, num_planners=args.num_planners)
 resizer = resizer(args.width)  # args.width should equal args.height
 # calculate random action baseline prior to TRAINING
 evaluater = evaluation(args.time_per_ep, t_SD=args.t_SD, p_SD=args.p_SD, w_and_h=args.width,
-                       nb_planners=args.num_planners, omnicron=args.omnicron, Theta=args.Theta, Epsilon=args.Epsilon)
+                       nb_planners=args.num_planners, omnicron=args.omnicron, Theta=args.Theta, Epsilon=args.Epsilon,
+                       step_penalty=args.step_penalty)
 
 _, average_Reward = evaluater.evaluateNetwork(episodeNumbers=[], averageRewards=[], currentEpisodeNumber=0, agent=agent,
                                               randAverageReward=0, rand_bool=True, n_actions=args.num_planners)
 rand_a_baseline = average_Reward[0]
-
-# time_per_ep = 1800
-# num_episodes = 3000  # up to 4000 if possible later
 
 episodeList = []
 averageRewardList = []
@@ -83,12 +82,13 @@ for i_episode in range(args.num_episodes):
     while not final_state and not time_restriction:
         num_passes += 1
         # Select and perform an action
-        actions, actionTime = agent.act(state, state_additional)
+        actions, actionTimes = agent.act(state, state_additional)
         actionNumber = torch.argmax(actions).item()
         # print("actionTime: ", actionTime)
         # print("action number: ", actionNumber)
         env_action = np.concatenate(
-            ((np.array(actions.detach())).reshape((args.num_planners,)), np.array(actionTime.detach())))
+            ((np.array(actions.detach())).reshape((args.num_planners,)),
+             np.array(actionTimes.detach()).reshape((args.num_planners,))))
         obs, rewardVal, final_state, time_restriction, _ = env.step(env_action)
         print(final_state)
         print(time_restriction)
@@ -96,8 +96,8 @@ for i_episode in range(args.num_episodes):
         next_state_additional = torch.tensor(obs.get('task_additional'), dtype=torch.float32)
         # Store the transition in memory
         mask = torch.Tensor([final_state])
-        rewardVal = torch.tensor(rewardVal, dtype=torch.float32)
-        memory.push(state, state_additional, env.task_idx, actions, actionTime, mask, next_state,
+        rewardVal = torch.tensor([rewardVal], dtype=torch.float32)
+        memory.push(state, state_additional, env.task_idx, actions, actionTimes, mask, next_state,
                     next_state_additional, rewardVal)
 
         # Move to the next state

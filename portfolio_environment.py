@@ -13,7 +13,7 @@ class PortfolioEnvironment(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, df, image_dir, max_time, func_reward, t_SD, p_SD, nb_planners, omnicron, Theta, Epsilon,
-                 time_per_ep):
+                 time_per_ep, step_penalty):
         super(PortfolioEnvironment, self).__init__()
         # General Information for this Environment
         self.df = df
@@ -26,6 +26,7 @@ class PortfolioEnvironment(gym.Env):
         self.omnicron = omnicron
         self.Theta = Theta
         self.Epsilon = Epsilon
+        self.step_penalty = step_penalty
         self.time_per_ep = time_per_ep
 
         # Action and Observation Space
@@ -44,6 +45,7 @@ class PortfolioEnvironment(gym.Env):
         # self.observation_space =
 
         # Current State of this Environment
+        self.steps = 0
         self.best_planner_time = (df.min(axis=1))[0]
         self.last_action_number = None
         self.task_idx = -1
@@ -53,6 +55,7 @@ class PortfolioEnvironment(gym.Env):
         self.consecutive_time_running = np.array([0.] * self.nb_planners)
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self.steps = 0
         self.task_idx = math.floor(random.random() * len(self.df))
         self.best_planner_time = self.df.min(axis=1)[self.task_idx]
         task_name = self.df.iloc[self.task_idx][0]
@@ -65,6 +68,7 @@ class PortfolioEnvironment(gym.Env):
         return self.get_Observation(), {}
 
     def reset_testMode(self, idx):
+        self.steps = 0
         self.task_idx = idx
         self.best_planner_time = self.df.min(axis=1)[self.task_idx]
         task_name = self.df.iloc[self.task_idx][0]
@@ -87,6 +91,7 @@ class PortfolioEnvironment(gym.Env):
     def step(self, action):
         # assert self.action_space.contains(action), "action space doesnt contain action..."
         assert self.task_img is not None, "Call reset before using step method..."
+        self.steps += 1
         final_state = False
         time_limit = False
         # action contains planner values and one time output at the end
@@ -95,22 +100,22 @@ class PortfolioEnvironment(gym.Env):
             same_action = True
         else:
             same_action = False
-        rewardVal, done = self.func_reward(self.task_idx, action_number, action[-1],
-                                           self.consecutive_time_running[action_number], self.time_left, self.df,
-                                           self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
-        self.time_left -= action[-1]
+        rewardVal, done = self.func_reward(self.task_idx, action[:self.nb_planners], action[self.nb_planners:],
+                                           self.consecutive_time_running, self.time_left, self.df, self.steps,
+                                           self.omnicron, self.Theta, self.Epsilon, self.time_per_ep, self.step_penalty)
+        self.time_left -= action[self.nb_planners + action_number]
         if same_action:
-            self.consecutive_time_running[action_number] += action[-1]
+            self.consecutive_time_running[action_number] += action[self.nb_planners + action_number]
         else:
             self.consecutive_time_running = np.zeros((self.nb_planners,))
-            self.consecutive_time_running[action_number] = self.consecutive_time_running[action_number] + action[-1]
+            self.consecutive_time_running[action_number] = self.consecutive_time_running[action_number] + action[
+                self.nb_planners + action_number]
 
         if self.max_time_executed[action_number] < self.consecutive_time_running[action_number]:
             self.max_time_executed[action_number] = self.consecutive_time_running[action_number]
         self.last_action_number = action_number
 
-        leq_zero_action = (action[-1] <= 0)
-        # (not going to fix problem)
+        leq_zero_action = (action[self.nb_planners + action_number] <= 0)
         current_planner_time = self.df.iloc[self.task_idx][action_number + 1]  # +1 because first col ist task title
         time_up = ((self.time_left - self.best_planner_time) <= 0) and \
                   ((self.time_left + self.consecutive_time_running[action_number]) - current_planner_time <= 0)
