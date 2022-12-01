@@ -11,7 +11,7 @@ def reward(taskIndex, plannerCurrNo, plannerCurrTime, plannerCurrPrevConsecutive
         return np.array([-ominicron], dtype=np.float32), False  # action time is zero
     if plannerCurrTime > time_left_episode:  # Patrick: Limited predictionto episode
         # Patrick: Let's keep it simple and not penalaize this yet.  --> penalized now
-        R_t = -5
+        R_t = 0
         plannerCurrTime = time_left_episode
         # return torch.tensor([-Theta - Epsilon], dtype=torch.float), False
     plannerCurrConsecutiveTime = plannerCurrPrevConsecutiveTime + plannerCurrTime

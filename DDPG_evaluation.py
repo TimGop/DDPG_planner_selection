@@ -71,7 +71,7 @@ class evaluation:
             plt.axhline(y=randAverageReward, label="random action baseline")
             plt.xlabel('number of episodes')
             plt.ylabel('average reward')
-            plt.title('average rewards while testing DQN:')
+            plt.title('average rewards while testing DDPG:')
             plt.legend()
             plt.show()
         agent.set_train()

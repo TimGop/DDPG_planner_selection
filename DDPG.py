@@ -58,6 +58,7 @@ class DDPG(object):
             actions, actionTime = action
             actionTime += self.env.get_time_noise()
             actions += self.env.get_planner_noise()
+            action = actions, actionTime
             return action
 
     def update(self, transition_batch):
