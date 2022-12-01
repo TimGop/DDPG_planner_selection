@@ -18,7 +18,7 @@ taskFolderLoc = "IPC-image-data-master/grounded/"
 parser = argparse.ArgumentParser()
 parser.add_argument("--BATCH_SIZE", default=32, type=int,
                     help="Size of the batch used in training to update the networks(default: 32)")
-parser.add_argument("--num_episodes", default=3000, type=int,
+parser.add_argument("--num_episodes", default=50000, type=int,
                     help="Num. of total timesteps of training (default: 3000)")
 parser.add_argument("--gamma", default=0.99,
                     help="Discount factor (default: 0.99)")
@@ -90,13 +90,13 @@ for i_episode in range(args.num_episodes):
         env_action = np.concatenate(
             ((np.array(actions.detach())).reshape((args.num_planners,)), np.array(actionTime.detach())))
         obs, rewardVal, final_state, time_restriction, _ = env.step(env_action)
-        print(final_state)
-        print(time_restriction)
+        # print(final_state)
+        # print(time_restriction)
         next_state = state
         next_state_additional = torch.tensor(obs.get('task_additional'), dtype=torch.float32)
         # Store the transition in memory
         mask = torch.Tensor([final_state])
-        rewardVal = torch.tensor(rewardVal, dtype=torch.float32)
+        rewardVal = torch.tensor([rewardVal], dtype=torch.float32)
         memory.push(state, state_additional, env.task_idx, actions, actionTime, mask, next_state,
                     next_state_additional, rewardVal)
 
