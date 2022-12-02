@@ -44,13 +44,9 @@ class evaluation:
                                           torch.tensor([self.env.time_left], dtype=torch.float32)))
             final_state = False
             time_restriction = False
-            first = True
             while not final_state and not time_restriction:
                 if not rand_bool:
                     action, action_t = agent.get_action(state, state_additional)
-                    if first:
-                        print(action)
-                        first = False
                 else:
                     action, action_t = self.randAction(self.env.time_left, n_actions)
                 complete_action = np.concatenate((np.array(action.detach().squeeze(0)), np.array(action_t.detach())))
