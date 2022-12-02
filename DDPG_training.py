@@ -38,7 +38,7 @@ parser.add_argument("--height", default=128, type=int,
                     help="Image height used(default: 128)")
 parser.add_argument("--mem_size", default=10000, type=int,
                     help="Size of the Replay Memory(default: 10000)")
-parser.add_argument("--p_SD", default=0.7, type=float,
+parser.add_argument("--p_SD", default=0.5, type=float,
                     help="Planner noise Standard deviation(default: 0.7)")
 parser.add_argument("--t_SD", default=200, type=float,
                     help="Time noise Standard deviation(default: 200)")

@@ -5,15 +5,16 @@ import numpy as np
 def reward(taskIndex, planners, plannerTimes, plannerConsecutiveTimes, time_left_episode, df, n_steps,
            ominicron=10, Theta=10, Epsilon=1, time_per_ep=1800, step_penalty=0.1):
     current_planner = np.argmax(planners)
-    print(current_planner)
     min_times = df.iloc[taskIndex][1:18]
-    done = min_times[current_planner] <= plannerTimes[current_planner] + plannerConsecutiveTimes[
+    current_planner_time = plannerTimes[current_planner] if plannerTimes[current_planner] <= time_left_episode \
+        else time_left_episode
+    done = min_times[current_planner] <= current_planner_time + plannerConsecutiveTimes[
         current_planner]
     R = -n_steps * step_penalty  # deinscentivizes too many steps
     for i in range(len(planners)):
         solvable = min_times[i] <= time_left_episode + plannerConsecutiveTimes[i]
         solves = min_times[i] <= plannerTimes[i] + plannerConsecutiveTimes[i]
-        C_i = ominicron if solvable else -(ominicron/2)
+        C_i = ominicron if solvable else -(ominicron / 2)
         K_i = Theta if solves else -Theta
         R_a_i = C_i * (2 * planners[i] - 1)
         R_t_i = planners[i] * K_i

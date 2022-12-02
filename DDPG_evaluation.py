@@ -47,6 +47,9 @@ class evaluation:
             while not final_state and not time_restriction:
                 if not rand_bool:
                     action, action_t = agent.get_action(state, state_additional)
+                    act_index = torch.argmax(action[0]).item()
+                    print("action", act_index)
+                    print("action time:", action_t[0][act_index])
                 else:
                     action, action_t = self.randAction(self.env.time_left, n_actions)
                 complete_action = np.concatenate(
