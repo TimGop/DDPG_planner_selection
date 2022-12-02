@@ -3,14 +3,12 @@ import numpy as np
 import pandas as p
 import argparse
 import portfolio_environment
+import time
 from DDPG_reward import reward
 from Replay_Memory_and_utils import ReplayMemory, Transition, resizer
 from DDPG_evaluation import evaluation
 from DDPG import DDPG
 
-# create args object to hold all parameters
-# in evaluation finish task(unsucessful) if same planner repeatedly chosen with bad time?state not ident. continue?
-# TODO limit steps per ep
 
 trainingSet = p.read_csv("IPC-image-data-master/problem_splits/training.csv")
 taskFolderLoc = "IPC-image-data-master/grounded/"
@@ -44,6 +42,7 @@ parser.add_argument("--mem_size", default=10000, type=int,
                     help="Size of the Replay Memory(default: 10000)")
 parser.add_argument("--p_SD", default=0.7, type=float, help="Planner noise Standard deviation(default: 0.7)")
 parser.add_argument("--t_SD", default=200, type=float, help="Time noise Standard deviation(default: 200)")
+parser.add_argument("--timeout", default=time.time() + 60 * 60 * 24, help="time limit(default: 10 min)")
 args = parser.parse_args()
 
 memory = ReplayMemory(args.mem_size)
@@ -65,9 +64,11 @@ rand_a_baseline = average_Reward[0]
 
 episodeList = []
 averageRewardList = []
+i_episode = 0
+max_average_reward = -10 ** 10
 
 # TRAINING
-for i_episode in range(args.num_episodes):
+while time.time() < args.timeout:
     print("episode " + str(i_episode))
     # obs is a dict
     obs, _ = env.reset()
@@ -117,5 +118,10 @@ for i_episode in range(args.num_episodes):
             print("testing network...")
             episodeList, averageRewardList = evaluater.evaluateNetwork(episodeList, averageRewardList, i_episode, agent,
                                                                        rand_a_baseline)
+            if max_average_reward < averageRewardList[-1]:
+                max_average_reward = averageRewardList[-1]
+                torch.save(agent.actor.state_dict(), "net_configs/actor.pth")
+                torch.save((agent.critic.state_dict()), "net_configs/critic.pth")
+    i_episode += 1
 
 print('Completed training...')
