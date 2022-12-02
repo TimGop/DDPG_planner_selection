@@ -24,6 +24,7 @@ def reward(taskIndex, planners, plannerTimes, plannerConsecutiveTimes, time_left
         elif plannerTimes[i] < 0:
             t_penalty_i = (-5 * Epsilon)
         t_j = time_left_episode if solves else plannerTimes[i]
+        t_j = t_j if t_j >= 0 else 0
         R += (R_a_i + R_t_i) * (t_j / time_per_ep) + t_penalty_i
     return R, done
 
