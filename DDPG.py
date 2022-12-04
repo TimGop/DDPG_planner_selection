@@ -46,19 +46,17 @@ class DDPG(object):
         hard_update(self.critic_target, self.critic)  # make sure _ and target have same weights
         hard_update(self.actor_target, self.actor)  # make sure _ and target have same weights
 
-    def get_action(self, select_action_State, select_action_State_additional):
+    def get_action(self, select_action_State, select_action_State_additional, discrete_action):
         self.actor.eval()
-        action = self.actor(select_action_State, torch.unsqueeze(select_action_State_additional, dim=0))
+        action = self.actor(select_action_State, torch.unsqueeze(select_action_State_additional, dim=0),
+                            discrete_action)
         self.actor.train()
         return action
 
-    def act(self, select_action_State, select_action_State_additional):
+    def act(self, select_action_State, select_action_State_additional, discrete_action):
         with torch.no_grad():
-            action = self.get_action(select_action_State, select_action_State_additional)
-            actions, actionTime = action
-            actionTime += self.env.get_time_noise()
-            actions += self.env.get_planner_noise()
-            action = actions, actionTime
+            action = self.get_action(select_action_State, select_action_State_additional, discrete_action)
+            action += self.env.get_time_noise()
             return action
 
     def update(self, transition_batch):

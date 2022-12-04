@@ -6,7 +6,7 @@ from PIL import Image
 
 Transition = namedtuple('Transition',
                         ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done', 'next_state',
-                         'next_state_additional', 'reward')
+                         'next_state_additional', 'reward_planner', 'reward_time')
                         )
 
 
@@ -15,19 +15,6 @@ class resizer:
         self.resize = T.Compose([T.ToPILImage(),
                                  T.Resize(width_and_height_size, interpolation=Image.CUBIC),
                                  T.ToTensor()])
-
-
-# TODO doesnt remove t=0 !?!
-# def init_weights(m):
-#     if isinstance(m, nn.Conv2d):
-#         nn.init.kaiming_uniform_(m.weight.data, nonlinearity='relu')
-#         nn.init.constant_(m.bias, 0)
-#     elif isinstance(m, nn.BatchNorm2d):
-#         nn.init.constant_(m.weight.data, 1)
-#         nn.init.constant_(m.bias, 0)
-#     elif isinstance(m, nn.Linear):  # does headPlanner also not just headTime
-#         nn.init.kaiming_uniform_(m.weight.data, nonlinearity='relu')
-#         nn.init.constant(m.bias, 0)
 
 
 class ReplayMemory(object):

@@ -28,21 +28,6 @@ class PortfolioEnvironment(gym.Env):
         self.Epsilon = Epsilon
         self.time_per_ep = time_per_ep
 
-        # Action and Observation Space
-        # One "action" per planner + time
-        # self.action_space = spaces.Box(
-        #     low=np.array([0.] * self.nb_planners + [0.]),
-        #     high=np.array([1.] * self.nb_planners + [float(self.max_time)])
-        # )  # Example for using image as input:
-        # self.observation_space = spaces.Dict({
-        #     "task_img": spaces.Box(low=0, high=1, shape=(X, Y)),
-        #     "task_additional": spaces.Box(low=np.array([0] * 2 * self.nb_planners + [0]),
-        #                                   high=np.array(np.array([1800] * 2 * self.nb_planners + [0])))
-        # })
-        # Patrick: Observation description for AN image. Not for our images and not
-        # for the other inputs
-        # self.observation_space =
-
         # Current State of this Environment
         self.best_planner_time = (df.min(axis=1))[0]
         self.last_action_number = None
@@ -61,7 +46,6 @@ class PortfolioEnvironment(gym.Env):
         self.time_left = self.max_time
         self.max_time_executed[:] = 0
         self.consecutive_time_running[:] = 0
-        # returns current state as a tuple
         return self.get_Observation(), {}
 
     def reset_testMode(self, idx):
@@ -90,14 +74,20 @@ class PortfolioEnvironment(gym.Env):
         final_state = False
         time_limit = False
         # action contains planner values and one time output at the end
-        action_number = np.argmax(action[:self.nb_planners])
+        action_number = int(action[0])
         if self.last_action_number == action_number:  # to update consecutive times below
             same_action = True
         else:
             same_action = False
-        rewardVal, done = self.func_reward(self.task_idx, action_number, action[-1],
-                                           self.consecutive_time_running[action_number], self.time_left, self.df,
-                                           self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
+        # TODO change rewards
+        rewardVal1, done1 = self.func_reward(self.task_idx, action_number, action[-1],
+                                             self.consecutive_time_running[action_number], self.time_left, self.df,
+                                             self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
+        rewardVal2, done2 = self.func_reward(self.task_idx, action_number, action[-1],
+                                             self.consecutive_time_running[action_number], self.time_left, self.df,
+                                             self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
+        done = done1 and done2
+
         self.time_left -= action[-1]
         if same_action:
             self.consecutive_time_running[action_number] += action[-1]
@@ -121,14 +111,10 @@ class PortfolioEnvironment(gym.Env):
             else:
                 time_limit = True
                 self.task_img = None
-        return self.get_Observation(), rewardVal, final_state, time_limit, {}
+        return self.get_Observation(), (rewardVal1, rewardVal2), final_state, time_limit, {}
 
     def get_time_noise(self):
         return torch.normal(torch.zeros((1,)), torch.full((1,), self.time_standard_dev))
-
-    def get_planner_noise(self):
-        return torch.normal(torch.zeros((1, self.nb_planners)),
-                            torch.full((1, self.nb_planners), self.planner_standard_dev))
 
     def render(self, mode='human', close=False):
         print(f"Tas: {self.task_idx}")
