@@ -14,10 +14,13 @@ class DQN_net(nn.Module):
         self.dropOut = nn.Dropout(p=0.5)
         self.flatten = nn.Flatten()
         NumAdditionalArgsLinLayer = 35
-        linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer) + NumAdditionalArgsLinLayer
-        self.headPlanner = nn.Linear(linear_input_size, outputs)
+        linear_input_size = ((h - 1) * (w - 1) * numOutputChannelsConvLayer)
+        self.h0 = nn.Linear(linear_input_size, 100)
+        self.h1 = nn.Linear(100+NumAdditionalArgsLinLayer, 100)
+        self.h2 = nn.Linear(100, 100)
+        self.headPlanner = nn.Linear(100, outputs)
 
     def forward(self, state, state_additional):
-        state_out = self.flatten(self.dropOut(self.conv2d(state)))
+        state_out = torch.relu(self.h0(torch.relu(self.flatten(self.dropOut(self.conv2d(state))))))
         x_last_layer = torch.concat((state_out, state_additional), dim=1)
-        return torch.softmax(self.headPlanner(x_last_layer), dim=1)
+        return torch.softmax(self.headPlanner(torch.relu(self.h2(torch.relu(self.h1(x_last_layer))))), dim=1)

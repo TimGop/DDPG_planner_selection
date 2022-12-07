@@ -2,9 +2,8 @@ import math
 
 from DQN_net import DQN_net
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam
-import torch.nn as nn
+import torch.nn.functional as F
 import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,38 +36,28 @@ class DQN(object):
         self.policy_net.train()
         self.target_net.train()
 
-    def optimize_model(self, transition_batch):
+    def update(self, transition_batch):
         self.set_train()
         state_batch = torch.cat(transition_batch.state).to(device)
         state_additional_batch = torch.stack(transition_batch.state_additional).to(device)
         action_batch = torch.stack(transition_batch.action).to(device)
-        time_batch = torch.stack(transition_batch.time).to(device)
-        reward_batch = torch.cat(transition_batch.reward).to(device)
+        # time_batch = torch.stack(transition_batch.time).to(device)
+        reward_batch = torch.cat(transition_batch.reward_planner).to(device)
         done_batch = torch.cat(transition_batch.done).to(device)
         next_state_batch = torch.cat(transition_batch.next_state).to(device)
         next_state_additional_batch = torch.stack(transition_batch.next_state_additional).to(device)
 
-        nn_output_vectors = self.policy_net(state_batch, state_additional_batch)
-        state_action_values = []
-        for i in range(0, len(action_batch)):
-            state_action_values.append(nn_output_vectors[i][0][action_batch[i][0].item()])  # TODO use gather instead
-        state_action_values = torch.stack(state_action_values)  # list of tensors to tensor
+        # nn_output_vectors = self.policy_net(state_batch, state_additional_batch)
+        state_action_values = self.policy_net(state_batch, state_additional_batch).gather(1, action_batch)
 
-        # next_state_values = torch.zeros(len(non_final_next_states), device=device)
-        # next_state_Values = torch.zeros(self.BATCH_SIZE, device=device)
-        targ_output_planner = self.target_net(next_state_batch, next_state_additional_batch)
-        next_state_values = torch.max(targ_output_planner, dim=1)
-        # for i in range(len(targ_output_planner)):
-        #     next_state_values[i] = torch.max(targ_output_planner[i])
-
-        # next_state_Values[non_final_mask] = next_state_values
+        next_state_values = self.target_net(next_state_batch, next_state_additional_batch).max(1)[0].detach()
 
         # Compute the expected Q values
-        expected_state_action_values = (1 - done_batch)(next_state_values * self.GAMMA) + reward_batch
+        expected_state_action_values = (1 - done_batch) * next_state_values * self.GAMMA + reward_batch
+        expected_state_action_values = expected_state_action_values.unsqueeze(1)  # change shape for loss
 
         # Compute Huber loss
-        criterion = nn.MSELoss()
-        loss_p = criterion(state_action_values.unsqueeze(1), expected_state_action_values.unsqueeze(1))
+        loss_p = F.huber_loss(state_action_values, expected_state_action_values)
         # Optimize the model
         self.optimizer.zero_grad()
         loss_p.backward()
@@ -91,5 +80,3 @@ class DQN(object):
     def hard_update(target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
-
-
