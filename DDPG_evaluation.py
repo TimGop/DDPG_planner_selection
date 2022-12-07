@@ -46,6 +46,7 @@ class evaluation:
             time_restriction = False
             # first = True
             while not final_state and not time_restriction:
+                number_of_passes += 1
                 if not rand_bool:
                     action, action_t = agent.get_action(state, state_additional)
                     # if first:
@@ -55,7 +56,7 @@ class evaluation:
                     action, action_t = self.randAction(self.env.time_left, n_actions)
                 complete_action = np.concatenate((np.array(action.detach().squeeze(0)), np.array(action_t.detach())))
                 obs, rewardVal, final_state, time_restriction, _ = self.env.step(complete_action)
-                number_of_passes += 1
+                state_additional = torch.tensor(obs.get('task_additional'), dtype=torch.float32)
                 if final_state:
                     rewardTotal += rewardVal
                     number_correct += 1
