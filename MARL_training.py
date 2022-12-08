@@ -44,7 +44,7 @@ if __name__ == "__main__":
                         help="Size of the Replay Memory(default: 10000)")
     parser.add_argument("--p_SD", default=0.7, type=float,
                         help="Planner noise Standard deviation(default: 0.7)")
-    parser.add_argument("--t_SD", default=200, type=float,
+    parser.add_argument("--t_SD", default=100, type=float,
                         help="Time noise Standard deviation(default: 200)")
     parser.add_argument("--timeout", default=time.time() + 60 * 60 * 24,
                         help="time limit(default: 24h)")

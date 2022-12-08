@@ -20,11 +20,12 @@ def reward(taskIndex, plannerCurrNo, plannerCurrTime_unclipped, plannerCurrPrevC
     if upper_bound - lower_bound <= 50:
         upper_bound = lower_bound + 50
     if upper_bound > time_left_episode:
-        upper_bound = time_left_episode
+        upper_bound = time_left_episode-0.1
+        # upper bound cant be exactly t_left or overestimating will give good reward
 
     # calculate the reward
     if plannerCurrTime <= 0:
-        R = plannerCurrTime
+        R = -10
     elif min_val < plannerCurrTime <= lower_bound:
         R = ((plannerCurrTime - min_val)/(lower_bound - min_val))
     elif lower_bound < plannerCurrTime <= upper_bound:
@@ -32,7 +33,7 @@ def reward(taskIndex, plannerCurrNo, plannerCurrTime_unclipped, plannerCurrPrevC
     elif upper_bound < plannerCurrTime < time_left_episode:
         R = (plannerCurrTime-time_left_episode)/(upper_bound-time_left_episode)
     elif plannerCurrTime == time_left_episode:
-        R = -(plannerCurrTime_unclipped-time_left_episode)
+        R = 0
     else:
         R = 0
 

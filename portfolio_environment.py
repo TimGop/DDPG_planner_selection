@@ -75,9 +75,9 @@ class PortfolioEnvironment(gym.Env):
 
     def step(self, action):
         action_time = self.time_left if self.time_left < action[-1] else action[-1]  # clip time
-        self.num_steps += 1
         # assert self.action_space.contains(action), "action space doesnt contain action..."
         assert self.task_img is not None, "Call reset before using step method..."
+        self.num_steps += 1
         final_state = False
         time_limit = False
         # action contains planner values and one time output at the end
@@ -99,8 +99,6 @@ class PortfolioEnvironment(gym.Env):
 
         self.time_left -= action_time
         current_planner_time = self.df.iloc[self.task_idx][action_number + 1]  # +1 because first col ist task title
-        time_up = ((self.time_left - self.best_planner_time) <= 0) and \
-                  ((self.time_left + self.consecutive_time_running[action_number]) - current_planner_time <= 0)
         if same_action:
             self.consecutive_time_running[action_number] += action_time
         else:
@@ -110,7 +108,9 @@ class PortfolioEnvironment(gym.Env):
         if self.max_time_executed[action_number] < self.consecutive_time_running[action_number]:
             self.max_time_executed[action_number] = self.consecutive_time_running[action_number]
         self.last_action_number = action_number
-
+        time_up = (((self.time_left - self.best_planner_time) <= 0) and
+                   ((self.time_left + self.consecutive_time_running[
+                       action_number]) - current_planner_time <= 0)) or self.time_left <= 0
         leq_zero_action = (action_time <= 0)
         # (not going to fix problem)
         if done or time_up or leq_zero_action:
@@ -123,8 +123,6 @@ class PortfolioEnvironment(gym.Env):
 
         if self.num_steps == 10 and not done:
             time_limit = True
-            rewardVal_planner = -1
-            rewardVal_time = -1
         return self.get_Observation(), (rewardVal_planner, rewardVal_time), final_state, time_limit, {}
 
     def get_time_noise(self):
