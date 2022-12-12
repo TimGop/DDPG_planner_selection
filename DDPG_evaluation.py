@@ -45,7 +45,6 @@ class evaluation:
             final_state = False
             time_restriction = False
             while not final_state and not time_restriction:
-                print(state_additional)
                 number_of_passes += 1
                 if not rand_bool:
                     action, action_t = agent.get_action(state, state_additional)
@@ -77,7 +76,7 @@ class evaluation:
             plt.ylabel('average reward')
             plt.title('average rewards while testing DDPG:')
             plt.legend()
-            plt.show()
+            plt.savefig("reward.pdf")
         agent.set_train()
         print("finish testing...")
         return episodeNumbers, averageRewards
