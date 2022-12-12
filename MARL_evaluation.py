@@ -85,7 +85,7 @@ class evaluation:
             plt.ylabel('average reward')
             plt.title('average rewards while testing DDPG:')
             plt.legend()
-            plt.show()
+            plt.savefig("reward.pdf")
         discrete_agent.set_train()
         continuous_agent.set_train()
         print("finish testing...")
