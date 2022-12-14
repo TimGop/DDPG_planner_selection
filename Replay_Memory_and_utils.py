@@ -6,7 +6,7 @@ from PIL import Image
 
 Transition = namedtuple('Transition',
                         ('state', 'state_additional', 'current_task_idx', 'action', 'time', 'done', 'next_state',
-                         'next_state_additional', 'reward_planner', 'reward_time')
+                         'next_state_additional', 'reward_planner')
                         )
 
 

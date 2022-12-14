@@ -12,7 +12,7 @@ import numpy as np
 class PortfolioEnvironment(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, image_dir, max_time, func_reward_planner, func_reward_time, t_SD, p_SD, nb_planners,
+    def __init__(self, df, image_dir, max_time, func_reward_planner, t_SD, p_SD, nb_planners,
                  omnicron, Theta, Epsilon,
                  time_per_ep):
         super(PortfolioEnvironment, self).__init__()
@@ -22,7 +22,6 @@ class PortfolioEnvironment(gym.Env):
         self.nb_planners = nb_planners
         self.max_time = max_time
         self.func_reward_planner = func_reward_planner
-        self.func_reward_time = func_reward_time
         self.time_standard_dev = t_SD
         self.planner_standard_dev = p_SD
         self.omnicron = omnicron
@@ -91,10 +90,7 @@ class PortfolioEnvironment(gym.Env):
                                                                    self.time_left,
                                                                    self.df,
                                                                    self.omnicron, self.Theta, self.Epsilon)
-        rewardVal_time, done_time = self.func_reward_time(self.task_idx, action_number, action[-1],
-                                                          self.consecutive_time_running[action_number], self.time_left,
-                                                          self.df,
-                                                          self.omnicron, self.Theta, self.Epsilon, self.time_per_ep)
+        done_time = self.df.iloc[self.task_idx][action_number+1] <= action_time
         done = done_planner and done_time
 
         self.time_left -= action_time
@@ -123,7 +119,7 @@ class PortfolioEnvironment(gym.Env):
 
         if self.num_steps == 10 and not done:
             time_limit = True
-        return self.get_Observation(), (rewardVal_planner, rewardVal_time), final_state, time_limit, {}
+        return self.get_Observation(), rewardVal_planner, final_state, time_limit, {}
 
     def get_time_noise(self):
         return torch.normal(torch.zeros((1,)), torch.full((1,), self.time_standard_dev))
